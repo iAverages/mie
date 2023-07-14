@@ -11,6 +11,7 @@ type Config struct {
 	B2BucketName       string `mapstructure:"B2_BUCKET_NAME"`
 	B2BucketPathPrefix string `mapstructure:"B2_BUCKET_PATH_PREFIX"`
 	HostUrl            string `mapstructure:"HOST_URL"`
+	TempDir            string
 }
 
 func LoadConfig(path string) (config Config, err error) {
@@ -22,6 +23,9 @@ func LoadConfig(path string) (config Config, err error) {
 	// Default values
 	viper.SetDefault("MIE_DEBUG", false)
 	viper.SetDefault("PORT", "8000")
+
+	// Interal config values that cant be changed
+	viper.SetDefault("TempDir", "/tmp")
 
 	err = viper.ReadInConfig()
 	if err != nil {
