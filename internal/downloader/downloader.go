@@ -26,7 +26,7 @@ func NewDownloaderService(logger *zap.SugaredLogger, config *config.Config) *Dow
 }
 
 func (s *DownloaderService) Download(url string) (DownloadedVideo, error) {
-	s.logger.Info("Downloading video", url)
+	s.logger.Info("Downloading video", "url", url)
 	cmd := exec.Command("yt-dlp", "-j", "--no-simulate", "-o", "%(upload_date)s-%(id)s.%(ext)s", url)
 	cmd.Dir = s.config.TempDir
 	out, err := cmd.Output()
@@ -38,7 +38,7 @@ func (s *DownloaderService) Download(url string) (DownloadedVideo, error) {
 	video := DownloadedVideo{}
 	json.Unmarshal(out, &video)
 
-	s.logger.Infow("Downloaded video", video)
+	s.logger.Infow("Downloaded video", "video", video)
 
 	return video, nil
 }
