@@ -1,8 +1,10 @@
 package upload
 
 import (
+	"bufio"
 	"context"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 
@@ -36,10 +38,36 @@ func (u *UploadService) UploadFile(file *os.File) (string, error) {
 
 	name := u.config.B2BucketPathPrefix + "/" + filepath.Base(file.Name())
 	object := bucket.Object(name)
-	writer := object.NewWriter(context.Background())
+	fileBytes, err := u.getFileBytes(file)
+	if err != nil {
+		return "", err
+	}
+
+	opts := b2.WithAttrsOption(&b2.Attrs{
+		ContentType: http.DetectContentType(fileBytes),
+	})
+
+	writer := object.NewWriter(context.Background(), opts)
 	if _, err := io.Copy(writer, file); err != nil {
 		return "", err
 	}
 
 	return name, writer.Close()
+}
+
+func (u *UploadService) getFileBytes(f *os.File) ([]byte, error) {
+	stat, err := f.Stat()
+	if err != nil {
+		u.logger.Errorw("Error getting file stats", "error", err)
+		return nil, err
+	}
+
+	bytes := make([]byte, stat.Size())
+	_, err = bufio.NewReader(f).Read(bytes)
+	if err != nil {
+		u.logger.Errorw("Error reading file", "error", err)
+		return nil, err
+	}
+
+	return bytes, nil
 }
