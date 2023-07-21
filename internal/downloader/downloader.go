@@ -1,6 +1,7 @@
 package downloader
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os/exec"
@@ -27,16 +28,21 @@ func NewDownloaderService(logger *zap.SugaredLogger, config *config.Config) *Dow
 
 func (s *DownloaderService) Download(url string) (DownloadedVideo, error) {
 	s.logger.Infow("Downloading video", "url", url)
-	cmd := exec.Command("yt-dlp", "-j", "--no-simulate", "-o", "%(upload_date)s-%(id)s.%(ext)s", url)
+	var outb, errb bytes.Buffer
+	cmd := exec.Command(s.config.YtdlPath, "-j", "--no-simulate", "-o", "%(upload_date)s-%(id)s.%(ext)s", url)
 	cmd.Dir = s.config.TempDir
-	out, err := cmd.Output()
+	cmd.Stdout = &outb
+	cmd.Stderr = &errb
+	cmd.Env = []string{}
+
+	err := cmd.Run()
 	if err != nil {
-		s.logger.Errorw("Error downloading video", "error", err)
+		s.logger.Errorw("Error downloading video", "error", err, "stderr", errb.String())
 		return DownloadedVideo{}, fmt.Errorf("error downloading video: %w", err)
 	}
 
 	video := DownloadedVideo{}
-	json.Unmarshal(out, &video)
+	json.Unmarshal(outb.Bytes(), &video)
 
 	s.logger.Infow("Downloaded video", "video", video)
 

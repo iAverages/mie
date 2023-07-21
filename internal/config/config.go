@@ -12,6 +12,7 @@ type Config struct {
 	B2BucketPathPrefix string `mapstructure:"B2_BUCKET_PATH_PREFIX"`
 	HostUrl            string `mapstructure:"HOST_URL"`
 	TempDir            string
+	YtdlPath           string `mapstructure:"YTDL_PATH"`
 }
 
 func LoadConfig(path string) (config Config, err error) {
@@ -23,6 +24,7 @@ func LoadConfig(path string) (config Config, err error) {
 	// Default values
 	viper.SetDefault("MIE_DEBUG", false)
 	viper.SetDefault("PORT", "8000")
+	viper.SetDefault("YTDL_PATH", "yt-dlp")
 
 	// Interal config values that cant be changed
 	viper.SetDefault("TempDir", "/tmp")
