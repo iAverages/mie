@@ -2,6 +2,7 @@ package bot
 
 import (
 	"os"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 	"github.com/iAverage/mie/internal/config"
@@ -60,7 +61,12 @@ func (b Bot) MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	for _, _url := range urls {
 		go func(url string) {
-			message, err := s.ChannelMessageSend(m.ChannelID, "Downloading...")
+			start := time.Now()
+			message, err := s.ChannelMessageSendEmbed(m.ChannelID, &discordgo.MessageEmbed{
+				Title: "Downloading...",
+				Color: b.config.EmbedColor,
+			})
+
 			if err != nil {
 				// probably dont have permissions to send messages
 				// or discord broke, dont try to send a message since
@@ -69,19 +75,31 @@ func (b Bot) MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 				return
 			}
 
+			videoDownloadStart := time.Now()
 			videoPath, err := b.services.downloader.Download(url)
+			videoDownloadTime := time.Since(videoDownloadStart)
 
 			if err != nil {
-				s.ChannelMessageEdit(m.ChannelID, message.ID, "Error downloading video")
+				s.ChannelMessageEditEmbed(m.ChannelID, message.ID, &discordgo.MessageEmbed{
+					Title: "Error downloading video",
+					Color: b.config.EmbedColor,
+				})
 				return
 			}
 
-			s.ChannelMessageEdit(m.ChannelID, message.ID, "Uploading to CDN...")
+			s.ChannelMessageEditEmbed(m.ChannelID, message.ID, &discordgo.MessageEmbed{
+				Title: "Uploading to CDN...",
+				Color: 11762810,
+			})
 
+			videoUploadStart := time.Now()
 			file, err := os.Open(b.config.TempDir + "/" + videoPath.Filename)
 			if err != nil {
 				b.logger.Errorw("Error opening file", "error", err)
-				s.ChannelMessageEdit(m.ChannelID, message.ID, "Error uploading file")
+				s.ChannelMessageEditEmbed(m.ChannelID, message.ID, &discordgo.MessageEmbed{
+					Title: "Error uploading video (open)",
+					Color: 11762810,
+				})
 				return
 			}
 			defer file.Close()
@@ -89,18 +107,46 @@ func (b Bot) MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			name, err := uploader.UploadFile(file)
 			if err != nil {
 				b.logger.Errorw("Error opening file", "error", err)
-				s.ChannelMessageEdit(m.ChannelID, message.ID, "Error uploading file")
+				s.ChannelMessageEditEmbed(m.ChannelID, message.ID, &discordgo.MessageEmbed{
+					Title: "Error uploading video (b2)",
+					Color: 11762810,
+				})
 				return
 			}
+			videoUploadTime := time.Since(videoUploadStart)
 
-			text := "Done!, here is the file: " + b.config.HostUrl + name
-			messageEdit := &discordgo.MessageEdit{
-				Content: &text,
+			content := b.config.HostUrl + name
+
+			_, err = s.ChannelMessageEditComplex(&discordgo.MessageEdit{
 				ID:      message.ID,
 				Channel: message.ChannelID,
-			}
+				Content: &content,
+				Embed: &discordgo.MessageEmbed{
+					Color: 11762810,
+					Fields: []*discordgo.MessageEmbedField{
+						{
+							Name:   "Download Time",
+							Value:  videoDownloadTime.Round(time.Millisecond).String(),
+							Inline: true,
+						},
+						{
+							Name:   "Upload Time",
+							Value:  videoUploadTime.Round(time.Millisecond).String(),
+							Inline: true,
+						},
+						{
+							Name:   "Total Time",
+							Value:  time.Since(start).Round(time.Millisecond).String(),
+							Inline: true,
+						},
+					},
+				},
+			})
 
-			s.ChannelMessageEditComplex(messageEdit)
+			if err != nil {
+				b.logger.Errorw("Error editing message", "error", err)
+				return
+			}
 		}(_url)
 	}
 }

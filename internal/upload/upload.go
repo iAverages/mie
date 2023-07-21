@@ -26,6 +26,7 @@ func NewUploadService(logger *zap.SugaredLogger, config *config.Config) *UploadS
 }
 
 func (u *UploadService) UploadFile(file *os.File) (string, error) {
+	u.logger.Infow("Uploading file", "file", file.Name())
 	b2Client, err := b2.NewClient(context.Background(), u.config.B2ApplicationKeyId, u.config.B2ApplicationKey)
 	if err != nil {
 		return "", err
@@ -33,6 +34,7 @@ func (u *UploadService) UploadFile(file *os.File) (string, error) {
 
 	bucket, err := b2Client.Bucket(context.Background(), u.config.B2BucketName)
 	if err != nil {
+		u.logger.Errorw("Error getting bucket", "error", err)
 		return "", err
 	}
 
@@ -40,6 +42,7 @@ func (u *UploadService) UploadFile(file *os.File) (string, error) {
 	object := bucket.Object(name)
 	fileBytes, err := u.getFileBytes(file)
 	if err != nil {
+		u.logger.Errorw("Error getting file bytes", "error", err)
 		return "", err
 	}
 
@@ -49,9 +52,10 @@ func (u *UploadService) UploadFile(file *os.File) (string, error) {
 
 	writer := object.NewWriter(context.Background(), opts)
 	if _, err := io.Copy(writer, file); err != nil {
+		u.logger.Errorw("Error copying file to writer", "error", err)
 		return "", err
 	}
-
+	u.logger.Infow("Uploaded file", "file", name)
 	return name, writer.Close()
 }
 

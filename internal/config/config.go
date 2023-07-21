@@ -11,8 +11,10 @@ type Config struct {
 	B2BucketName       string `mapstructure:"B2_BUCKET_NAME"`
 	B2BucketPathPrefix string `mapstructure:"B2_BUCKET_PATH_PREFIX"`
 	HostUrl            string `mapstructure:"HOST_URL"`
-	TempDir            string
 	YtdlPath           string `mapstructure:"YTDL_PATH"`
+	// Internal config values that cant be changed
+	TempDir    string
+	EmbedColor int
 }
 
 func LoadConfig(path string) (config Config, err error) {
@@ -28,6 +30,7 @@ func LoadConfig(path string) (config Config, err error) {
 
 	// Interal config values that cant be changed
 	viper.SetDefault("TempDir", "/tmp")
+	viper.SetDefault("EmbedColor", 11762810)
 
 	err = viper.ReadInConfig()
 	if err != nil {
