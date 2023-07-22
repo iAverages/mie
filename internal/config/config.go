@@ -10,6 +10,7 @@ type Config struct {
 	B2ApplicationKey   string `mapstructure:"B2_APPLICATION_KEY"`
 	B2BucketName       string `mapstructure:"B2_BUCKET_NAME"`
 	B2BucketPathPrefix string `mapstructure:"B2_BUCKET_PATH_PREFIX"`
+	B2Url              string `mapstructure:"B2_URl"`
 	HostUrl            string `mapstructure:"HOST_URL"`
 	YtdlPath           string `mapstructure:"YTDL_PATH"`
 	// Internal config values that cant be changed

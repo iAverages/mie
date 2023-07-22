@@ -32,11 +32,16 @@ func Create(config *config.Config) (*discordgo.Session, error) {
 }
 
 func CreateHandlers(logger *zap.SugaredLogger, config *config.Config) *Bot {
+	uploader, err := upload.NewUploadService(logger, config)
+	if err != nil {
+		logger.Fatalw("Error creating upload service", "error", err)
+	}
+
 	return &Bot{
 		logger: logger,
 		config: config,
 		services: &services{
-			uploader:   upload.NewUploadService(logger, config),
+			uploader:   uploader,
 			downloader: downloader.NewDownloaderService(logger, config),
 		},
 	}
@@ -46,8 +51,6 @@ func (b Bot) MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 	if m.Author.ID == s.State.User.ID {
 		return
 	}
-
-	uploader := upload.NewUploadService(b.logger, b.config)
 
 	rx, err := xurls.StrictMatchingScheme("https")
 	if err != nil {
@@ -104,9 +107,12 @@ func (b Bot) MessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 			}
 			defer file.Close()
 
-			name, err := uploader.UploadFile(file)
+			t := time.Now()
+			b.logger.Infow("Uploading file", "file", file.Name())
+			name, err := b.services.uploader.UploadFile(file)
+			b.logger.Infow("Uploaded file", "duration", time.Since(t))
 			if err != nil {
-				b.logger.Errorw("Error opening file", "error", err)
+				b.logger.Errorw("Error uploading file", "error", err)
 				s.ChannelMessageEditEmbed(m.ChannelID, message.ID, &discordgo.MessageEmbed{
 					Title: "Error uploading video (b2)",
 					Color: 11762810,

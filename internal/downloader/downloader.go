@@ -29,7 +29,12 @@ func NewDownloaderService(logger *zap.SugaredLogger, config *config.Config) *Dow
 func (s *DownloaderService) Download(url string) (DownloadedVideo, error) {
 	s.logger.Infow("Downloading video", "url", url)
 	var outb, errb bytes.Buffer
-	cmd := exec.Command(s.config.YtdlPath, "-j", "--no-simulate", "-o", "%(upload_date)s-%(id)s.%(ext)s", url)
+	cmd := exec.Command(s.config.YtdlPath,
+		"-j",
+		"--no-simulate",
+		"-o", "%(upload_date)s-%(id)s.%(ext)s",
+		"--concurrent-fragments", "10",
+		url)
 	cmd.Dir = s.config.TempDir
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
