@@ -34,12 +34,14 @@ func (s *DownloaderService) Download(url string) (DownloadedVideo, error) {
 		"--no-simulate",
 		"-o", "%(upload_date)s-%(id)s.%(ext)s",
 		"--concurrent-fragments", "10",
+		"--ffmpeg-location", s.config.FfmpegPath,
 		url)
 	cmd.Dir = s.config.TempDir
 	cmd.Stdout = &outb
 	cmd.Stderr = &errb
 	cmd.Env = []string{}
 
+	s.logger.Debugw("ytdl command", "command", cmd.String())
 	err := cmd.Run()
 	if err != nil {
 		s.logger.Errorw("Error downloading video", "error", err, "stderr", errb.String())
@@ -49,6 +51,7 @@ func (s *DownloaderService) Download(url string) (DownloadedVideo, error) {
 	video := DownloadedVideo{}
 	json.Unmarshal(outb.Bytes(), &video)
 
+	s.logger.Debugw("ytdl output", "output", outb.String())
 	s.logger.Infow("Downloaded video", "video", video)
 
 	return video, nil

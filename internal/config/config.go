@@ -13,6 +13,8 @@ type Config struct {
 	B2Url              string `mapstructure:"B2_URl"`
 	HostUrl            string `mapstructure:"HOST_URL"`
 	YtdlPath           string `mapstructure:"YTDL_PATH"`
+	FfmpegPath         string `mapstructure:"FFMPEG_PATH"`
+
 	// Internal config values that cant be changed
 	TempDir    string
 	EmbedColor int
