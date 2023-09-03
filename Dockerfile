@@ -1,8 +1,11 @@
-FROM --platform=$BUILDPLATFORM python:3.11.5 AS ytdlp_builder
+# Cant use python here, GLIBC_2.33 not found 
+FROM --platform=$BUILDPLATFORM centos AS ytdlp_builder
 
 WORKDIR /temp/yt-dlp
 
-RUN git clone https://github.com/yt-dlp/yt-dlp.git \
+RUN apt update \ 
+    && apt install python3 git \
+    && git clone https://github.com/yt-dlp/yt-dlp.git \
     && cd yt-dlp \
     && python3 -m pip install -U pyinstaller -r requirements.txt \
     && python3 devscripts/make_lazy_extractors.py \
