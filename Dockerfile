@@ -1,10 +1,8 @@
-# Cant use python here, GLIBC_2.33 not found 
-FROM --platform=$BUILDPLATFORM centos AS ytdlp_builder
+FROM --platform=$TARGETPLATFORM python:alpine3.18 AS ytdlp_builder
 
 WORKDIR /temp/yt-dlp
 
-RUN apt update \ 
-    && apt install python3 git \
+RUN apk update && apk add git binutils \
     && git clone https://github.com/yt-dlp/yt-dlp.git \
     && cd yt-dlp \
     && python3 -m pip install -U pyinstaller -r requirements.txt \
@@ -44,9 +42,7 @@ RUN CGO_ENABLED=0 \
      go build -ldflags="-s -w" -o mie ./cmd
 
 
-# FROM --platform=$TARGETPLATFORM  alpine:3.18.2
-# FROM --platform=$TARGETPLATFORM linuxserver/ffmpeg
-FROM --platform=$TARGETPLATFORM centos
+FROM --platform=$TARGETPLATFORM  alpine:3.18.2
 
 WORKDIR /app
 
