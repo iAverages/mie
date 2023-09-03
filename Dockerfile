@@ -9,7 +9,7 @@ RUN apk update && apk add git binutils \
     && python3 devscripts/make_lazy_extractors.py \
     && python3 pyinst.py 
 
-FROM --platform=$BUILDPLATFORM golang:1.20 AS build
+FROM --platform=$BUILDPLATFORM golang:1.21@sha256:b490ae1f0ece153648dd3c5d25be59a63f966b5f9e1311245c947de4506981aa AS build
 
 WORKDIR /app
 
