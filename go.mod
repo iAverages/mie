@@ -6,7 +6,7 @@ require (
 	github.com/bwmarrin/discordgo v0.27.1
 	github.com/minio/minio-go/v7 v7.0.63
 	github.com/spf13/viper v1.16.0
-	go.uber.org/zap v1.25.0
+	go.uber.org/zap v1.26.0
 	mvdan.cc/xurls/v2 v2.5.0
 )
 
