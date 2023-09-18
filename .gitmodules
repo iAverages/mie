@@ -1,0 +1,3 @@
+[submodule "mie/backblaze-b2-client-rs"]
+	path = mie/backblaze-b2-client-rs
+	url = git@github.com:SalahaldinBilal/backblaze-b2-client-rs.git

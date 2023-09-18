@@ -1,0 +1,22 @@
+[package]
+name = "mie"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rand = "0.8.5"
+serenity = { version = "0.11", features = ["client", "gateway", "rustls_backend", "model",], default-features = false}
+tokio = { version = "1.21.2", features = ["macros", "rt-multi-thread"] }
+url = "2.4.1"
+ytd-rs = {version = "0.1.7", features = ["yt-dlp"] }
+backblaze-b2-client = { path = "./backblaze-b2-client-rs/backblaze-b2-client" }
+futures = "0.3.28"
+nonzero_ext = "0.3.0"
+tokio-util = "0.7.8"
+dotenv = "0.15.0"
+serde_json = "1.0.107"
+urlencoding = "2.1.3"
+sha1_smol = "1.0.0"
+async-stream = "0.3.5"
