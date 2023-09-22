@@ -27,7 +27,7 @@ COPY backblaze-b2-client-rs ./backblaze-b2-client-rs
 RUN cargo build --release --target aarch64-unknown-linux-gnu
 
 
-FROM --platform=$TARGETPLATFORM alpine:3.18.2 AS ytdlp
+FROM --platform=$TARGETPLATFORM alpine:3.18.3 AS ytdlp
 
 RUN apk update && apk add wget \
     && wget https://github.com/yt-dlp/yt-dlp/releases/download/2023.07.06/yt-dlp_linux_aarch64 -O /usr/local/bin/yt-dlp \
