@@ -33,8 +33,10 @@ FROM --platform=$TARGETPLATFORM alpine:3.18.3 AS ytdlp
 
 RUN apk update && apk add wget \
     && wget https://github.com/yt-dlp/yt-dlp/releases/download/2023.07.06/yt-dlp_linux_aarch64 -O /usr/local/bin/yt-dlp \
-    && chmod +x /usr/local/bin/yt-dlp
-
+    && chmod +x /usr/local/bin/yt-dlp \
+    && wget https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz -O /tmp/ffmpeg.tar.xz \
+    && tar -xf /tmp/ffmpeg.tar.xz -C /tmp --strip-components=1 \
+    && rm -rf /tmp/ffmpeg.tar.xz
 
 FROM debian:${DEBIAN_VERSION}-slim
 
@@ -47,6 +49,8 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes \
 
 COPY --from=build /app/target/aarch64-unknown-linux-gnu/release/mie /app/mie
 COPY --from=ytdlp  /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
+COPY --from=ytdlp  /tmp/bin/ffmpeg /usr/local/bin/ffmpeg
+COPY --from=ytdlp  /tmp/bin/ffprobe /usr/local/bin/ffprobe
 
 ENV PATH="/usr/local/bin:/app:${PATH}"
 
