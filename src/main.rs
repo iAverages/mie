@@ -95,8 +95,40 @@ impl EventHandler for Handler {
 
                 let path = PathBuf::from("/tmp/mie");
                 let downloaded_file = PathBuf::from(&file_name);
-                let ytd = YoutubeDL::new(&path, args, &url.as_str()).unwrap();
-                ytd.download().unwrap();
+                let ytd = match YoutubeDL::new(&path, args, &url.as_str()) {
+                    Ok(ytd) => ytd,
+                    Err(why) => {
+                        println!("Error creating YoutubeDL: {:?}", why);
+                        update_message
+                            .edit(&context.http, |m| {
+                                m.embed(|e| {
+                                    e.title("Error downloading video YTDL_INIT_ERROR")
+                                        .description(&download_name)
+                                        .color(EMBED_COLOR)
+                                })
+                            })
+                            .await
+                            .unwrap();
+                        return;
+                    }
+                };
+                match ytd.download() {
+                    Ok(_) => {}
+                    Err(why) => {
+                        println!("Error downloading video: {:?}", why);
+                        update_message
+                            .edit(&context.http, |m| {
+                                m.embed(|e| {
+                                    e.title("Error downloading video YTDL_DOWNLOAD_ERROR")
+                                        .description(&download_name)
+                                        .color(EMBED_COLOR)
+                                })
+                            })
+                            .await
+                            .unwrap();
+                        return;
+                    }
+                };
 
                 let download_complete = process_start.elapsed().as_secs_f32();
                 println!("Download complete in {} seconds", download_complete);
@@ -216,7 +248,12 @@ impl EventHandler for Handler {
                             break;
                         }
 
-                        let mut last_data = last_update_data.recv().unwrap();
+                        let mut last_data = match last_update_data.recv() {
+                            Ok(data) => data,
+                            Err(_) => {
+                                continue;
+                            }
+                        };
 
                         let data = loop {
                             match last_update_data.recv() {
@@ -276,7 +313,7 @@ impl EventHandler for Handler {
                     }
                 });
 
-                upload_files(
+                let uploaded_files = upload_files(
                     b2_client,
                     bucket_id,
                     files_to_upload,
@@ -289,11 +326,28 @@ impl EventHandler for Handler {
                             percentage * 100.0,
                             bps
                         );
-                        set_last_update_data.send(write).unwrap();
+                        set_last_update_data.send(write).ok();
                     }),
                 )
-                .await
-                .unwrap();
+                .await;
+
+                match uploaded_files {
+                    Ok(_) => {}
+                    Err(why) => {
+                        println!("Error uploading file: {:?}", why);
+                        update_message
+                            .edit(&context.http, |m| {
+                                m.embed(|e| {
+                                    e.title("Error uploading video B2_UPLOAD_ERROR")
+                                        .description(&download_name)
+                                        .color(EMBED_COLOR)
+                                })
+                            })
+                            .await
+                            .unwrap();
+                        return;
+                    }
+                };
 
                 token.cancel();
 
