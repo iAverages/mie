@@ -2,7 +2,6 @@
 mod upload;
 
 use pretty_bytes::converter::convert;
-use std::f32::consts::E;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -43,12 +42,13 @@ impl EventHandler for Handler {
         let content = msg.content.split_whitespace();
         let host_url = env::var("HOST_URL").expect("no host URL provided");
         let path_prefix = env::var("B2_BUCKET_PATH_PREFIX").expect("no path prefix provided");
+        let debug = env::var("DEBUG").unwrap_or_else(|_| "false".to_string()) == "true";
         let cdn_url = host_url + &path_prefix;
 
         for word in content {
-            if !(word.starts_with("https://") || word.starts_with("http://"))
-            // && !word.starts_with(&cdn_url))
-            {
+            let is_http = word.starts_with("https://") || word.starts_with("http://");
+            let is_cdn = !debug || !word.starts_with(&cdn_url);
+            if !is_http || is_cdn {
                 continue;
             }
 
