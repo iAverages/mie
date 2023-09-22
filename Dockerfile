@@ -1,6 +1,5 @@
 ARG DEBIAN_VERSION="12.1"
 
-# FROM --platform=$BUILDPLATFORM debian:$DEBIAN_VERSION as librespot-cross
 FROM --platform=$BUILDPLATFORM rust:1.72.0-slim-bookworm AS build
 
 WORKDIR /app 
@@ -50,4 +49,4 @@ COPY --from=ytdlp  /usr/local/bin/yt-dlp /usr/local/bin/yt-dlp
 
 ENV PATH="/usr/local/bin:/app:${PATH}"
 
-CMD ["/app/mie"]
+ENTRYPOINT  ["/app/mie"]
