@@ -10,7 +10,7 @@ base64 = "0.21.4"
 reqwest = { version = "0.11.14", features = ["json", "stream"] }
 serde = { version = "1.0.152", features = ["derive"] }
 tokio = { version= "1.26.0", features = ["full"] }
-strum = "0.24"
+strum = "0.25"
 strum_macros = "0.24"
 typed-builder = "0.14.0"
 backblaze-b2-client-macros = { version = "=0.1.0", path = "../backblaze-b2-client-macros" }
