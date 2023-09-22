@@ -15,4 +15,4 @@ Cargo.lock
 
 *.env
 .env
-old
+docker/credentials
