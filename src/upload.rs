@@ -61,8 +61,6 @@ where
         let task_abort_handles = abort_handles.clone();
 
         let join_handle = tokio::spawn(async move {
-            let callback = callback.clone();
-
             const UPLOAD_SIZE_LIMIT: u64 = MEGABYTE as u64 * 200;
             const MAX_RETRIES: u64 = 50;
             let mut retry_count = 0;
@@ -72,25 +70,25 @@ where
 
                 let inner_file_path = file.path.clone();
 
+                let extra_file_info = match file.extra_info.as_ref() {
+                    Some(map) => {
+                        let mut ret_map: HashMap<String, serde_json::Value> =
+                            HashMap::with_capacity(map.capacity());
+
+                        for (key, value) in map.iter() {
+                            ret_map.insert(
+                                key.clone(),
+                                serde_json::to_value(urlencoding::encode(value))?,
+                            );
+                        }
+
+                        Some(ret_map)
+                    }
+                    None => None,
+                };
+
                 let result = match file_size {
                     0..=UPLOAD_SIZE_LIMIT => {
-                        let extra_file_info = match file.extra_info.as_ref() {
-                            Some(map) => {
-                                let mut ret_map: HashMap<String, serde_json::Value> =
-                                    HashMap::with_capacity(map.capacity());
-
-                                for (key, value) in map.iter() {
-                                    ret_map.insert(
-                                        key.clone(),
-                                        serde_json::to_value(urlencoding::encode(value))?,
-                                    );
-                                }
-
-                                Some(ret_map)
-                            }
-                            None => None,
-                        };
-
                         upload_small_file(
                             &file.path,
                             &bucket_id,
@@ -112,20 +110,6 @@ where
                         .await
                     }
                     _ => {
-                        let extra_file_info = match file.extra_info.as_ref() {
-                            Some(map) => {
-                                let mut ret_map: HashMap<String, serde_json::Value> =
-                                    HashMap::with_capacity(map.capacity());
-
-                                for (key, value) in map.iter() {
-                                    ret_map.insert(key.clone(), serde_json::to_value(value)?);
-                                }
-
-                                Some(ret_map)
-                            }
-                            None => None,
-                        };
-
                         upload_large_file(
                             &file.path,
                             &bucket_id,
