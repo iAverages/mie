@@ -1,0 +1,2 @@
+[workspace]
+members = ["backblaze-b2-client", "backblaze-b2-client-macros"]

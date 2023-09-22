@@ -1,0 +1,3 @@
+[registry."pihole.dan.local:5000"]
+http = true
+insecure = true
