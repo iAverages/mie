@@ -30,6 +30,7 @@ impl TypeMapKey for Uploader {
     type Value = Arc<B2Client>;
 }
 
+const MAX_CROP_SECONDS: i32 = 60;
 const EMBED_COLOR: Colour = Colour::new(11762810);
 
 #[async_trait]
@@ -47,7 +48,7 @@ impl EventHandler for Handler {
 
         for word in content {
             let is_http = word.starts_with("https://") || word.starts_with("http://");
-            let is_cdn = !debug || !word.starts_with(&cdn_url);
+            let is_cdn = !debug && word.starts_with(&cdn_url);
             if !is_http || is_cdn {
                 continue;
             }
@@ -103,7 +104,6 @@ impl EventHandler for Handler {
                             .edit(&context.http, |m| {
                                 m.embed(|e| {
                                     e.title("Error downloading video YTDL_INIT_ERROR")
-                                        .description(&download_name)
                                         .color(EMBED_COLOR)
                                 })
                             })
@@ -120,7 +120,6 @@ impl EventHandler for Handler {
                             .edit(&context.http, |m| {
                                 m.embed(|e| {
                                     e.title("Error downloading video YTDL_DOWNLOAD_ERROR")
-                                        .description(&download_name)
                                         .color(EMBED_COLOR)
                                 })
                             })
@@ -138,64 +137,36 @@ impl EventHandler for Handler {
                 let cropped_file_name =
                     "/tmp/mie/".to_string() + &download_name.to_string() + "_cropped.mp4";
 
-                // let crop_detech = Command::new("ffmpeg")
-                //     .args(&[
-                //         "-i",
-                //         &file_name,
-                //         "-t",
-                //         "1",
-                //         "-vf",
-                //         "cropdetect",
-                //         "-f",
-                //         "null",
-                //         "-",
-                //     ])
-                //     .stdout(Stdio::piped())
-                //     .output()
-                //     .expect("failed to execute process");
+                let duration = match Command::new("ffprobe")
+                    .args(&[
+                        "-v",
+                        "error",
+                        "-show_entries",
+                        "format=duration",
+                        "-of",
+                        "default=noprint_wrappers=1:nokey=1",
+                        &file_name,
+                    ])
+                    .output()
+                {
+                    Ok(duration) => String::from_utf8_lossy(&duration.stdout)
+                        .to_string()
+                        .parse::<i32>()
+                        .unwrap_or(-1),
+                    Err(_) => "0".to_string().parse::<i32>().unwrap_or(-1),
+                };
 
-                // let crop_detech = String::from_utf8_lossy(&crop_detech.stderr);
-                // let crop = crop_detech
-                //     .lines()
-                //     .filter(|line| line.contains("crop="))
-                //     .last()
-                //     .unwrap()
-                //     .split("crop=")
-                //     .last()
-                //     .unwrap()
-                //     .split(")")
-                //     .next()
-                //     .unwrap();
-
-                // Command::new("ffmpeg")
-                //     .args(&[
-                //         "-i",
-                //         &file_name_b,
-                //         "-vf",
-                //         &format!("crop={}", crop),
-                //         &cropped_file_name,
-                //     ])
-                //     .output()
-                //     .expect("failed to execute process");
-
-                // let cropped_meta = fs::metadata(&cropped_file_name).unwrap();
-                // let cropped_size = cropped_meta.len();
-                // let was_cropped = cropped_size > 0;
-                let was_cropped = false;
-
-                if was_cropped {
-                    // println!("Cropped to {}", crop);
+                let mut was_cropped = false;
+                if MAX_CROP_SECONDS > duration && duration > 0 {
+                    println!("Video is {} seconds, cropping", duration);
+                    was_cropped = crop_video(file_name, file_name_b, &cropped_file_name);
                 }
 
                 let crop_complete = crop_start.elapsed().as_secs_f32();
 
                 update_message
                     .edit(&context.http, |m| {
-                        m.embed(|e| {
-                            e.title("Uploading to B2")
-                                .description(&download_name)
-                                .color(11762810)
-                        })
+                        m.embed(|e| e.title("Uploading to B2").color(11762810))
                     })
                     .await
                     .unwrap();
@@ -232,7 +203,6 @@ impl EventHandler for Handler {
 
                 let update_status_message =
                     Arc::new(futures_locks::RwLock::new(update_message.clone()));
-                let download_name_cb = download_name.clone();
 
                 let token = CancellationToken::new();
                 let cloned_token = token.clone();
@@ -286,26 +256,19 @@ impl EventHandler for Handler {
                         message
                             .edit(&http, |m| {
                                 m.embed(|e| {
-                                    e.title("Uploading to B2")
-                                        .description(&download_name_cb)
-                                        .color(11762810)
-                                        .fields([
-                                            (
-                                                "Progress",
-                                                &format!(
-                                                    "{}/{}",
-                                                    convert(uploaded as f64),
-                                                    convert(total as f64)
-                                                ),
-                                                true,
+                                    e.title("Uploading to B2").color(11762810).fields([
+                                        (
+                                            "Progress",
+                                            &format!(
+                                                "{}/{}",
+                                                convert(uploaded as f64),
+                                                convert(total as f64)
                                             ),
-                                            (
-                                                "Percentage",
-                                                &format!("{}%", percentage * 100.0),
-                                                true,
-                                            ),
-                                            ("Speed", &format!("{}", convert(bps as f64)), true),
-                                        ])
+                                            true,
+                                        ),
+                                        ("Percentage", &format!("{}%", percentage * 100.0), true),
+                                        ("Speed", &format!("{}", convert(bps as f64)), true),
+                                    ])
                                 })
                             })
                             .await
@@ -319,13 +282,6 @@ impl EventHandler for Handler {
                     files_to_upload,
                     Some(move |_path: &str, uploaded, total, percentage, bps, _eta| {
                         let write = (uploaded, total, percentage, bps);
-                        println!(
-                            "ONCHUNK: Upload progress: {}/{} ({}%) at {}",
-                            uploaded,
-                            total,
-                            percentage * 100.0,
-                            bps
-                        );
                         set_last_update_data.send(write).ok();
                     }),
                 )
@@ -339,7 +295,6 @@ impl EventHandler for Handler {
                             .edit(&context.http, |m| {
                                 m.embed(|e| {
                                     e.title("Error uploading video B2_UPLOAD_ERROR")
-                                        .description(&download_name)
                                         .color(EMBED_COLOR)
                                 })
                             })
@@ -409,6 +364,66 @@ impl EventHandler for Handler {
 
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
+    }
+}
+
+fn crop_video(file_name: String, file_name_b: String, cropped_file_name: &String) -> bool {
+    let crop_detech = match Command::new("ffmpeg")
+        .args(&[
+            "-i",
+            &file_name,
+            "-t",
+            "1",
+            "-vf",
+            "cropdetect",
+            "-f",
+            "null",
+            "-",
+        ])
+        .stdout(Stdio::piped())
+        .output()
+    {
+        Ok(crop_detech) => crop_detech,
+        Err(why) => {
+            println!("Error cropping video: {:?}", why);
+            return false;
+        }
+    };
+
+    let crop_detech = String::from_utf8_lossy(&crop_detech.stderr);
+    let crop = match crop_detech
+        .lines()
+        .filter(|line| line.contains("crop="))
+        .last()
+        .unwrap()
+        .split("crop=")
+        .last()
+        .unwrap()
+        .split(")")
+        .next()
+    {
+        Some(crop) => crop,
+        None => {
+            println!("Error cropping video: {:?}", crop_detech);
+            return false;
+        }
+    };
+
+    match Command::new("ffmpeg")
+        .args(&[
+            "-i",
+            &file_name_b,
+            "-vf",
+            &format!("crop={}", crop),
+            &cropped_file_name,
+        ])
+        .output()
+    {
+        Ok(_) => return true,
+        Err(why) => {
+            println!("Error cropping video: {:?}", why);
+            return false;
+        }
     }
 }
 
