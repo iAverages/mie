@@ -2,6 +2,7 @@
 mod upload;
 
 use pretty_bytes::converter::convert;
+use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
@@ -84,7 +85,6 @@ impl EventHandler for Handler {
                     .collect();
 
                 let file_name = "/tmp/mie/".to_string() + &download_name.to_string() + ".mp4";
-                let file_name_b = file_name.clone();
 
                 let args = vec![
                     Arg::new_with_arg(
@@ -159,7 +159,7 @@ impl EventHandler for Handler {
                 let mut was_cropped = false;
                 if MAX_CROP_SECONDS > duration && duration > 0 {
                     println!("Video is {} seconds, cropping", duration);
-                    was_cropped = crop_video(file_name, file_name_b, &cropped_file_name);
+                    was_cropped = crop_video(&file_name, &cropped_file_name);
                 }
 
                 let crop_complete = crop_start.elapsed().as_secs_f32();
@@ -193,7 +193,7 @@ impl EventHandler for Handler {
 
                 if was_cropped {
                     files_to_upload.push(upload::UploadFile {
-                        path: cropped_file_name,
+                        path: cropped_file_name.clone(),
                         extra_info: None,
                     });
                 }
@@ -346,6 +346,12 @@ impl EventHandler for Handler {
                     false => desc,
                 };
 
+                fs::remove_file(file_name.clone()).unwrap_or_else(|_| {
+                    println!("Could not remove file: {}", &file_name);
+                });
+                fs::remove_file(&cropped_file_name).unwrap_or_else(|_| {
+                    println!("Could not remove file: {}", &cropped_file_name);
+                });
                 println!("done");
                 update_message
                     .edit(&context.http, |m| {
@@ -367,7 +373,7 @@ impl EventHandler for Handler {
     }
 }
 
-fn crop_video(file_name: String, file_name_b: String, cropped_file_name: &String) -> bool {
+fn crop_video(file_name: &String, cropped_file_name: &String) -> bool {
     let crop_detech = match Command::new("ffmpeg")
         .args(&[
             "-i",
@@ -412,7 +418,7 @@ fn crop_video(file_name: String, file_name_b: String, cropped_file_name: &String
     match Command::new("ffmpeg")
         .args(&[
             "-i",
-            &file_name_b,
+            &file_name,
             "-vf",
             &format!("crop={}", crop),
             &cropped_file_name,
