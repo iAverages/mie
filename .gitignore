@@ -16,3 +16,4 @@ Cargo.lock
 *.env
 .env
 docker/credentials
+node_modules/

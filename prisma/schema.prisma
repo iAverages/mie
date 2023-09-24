@@ -1,0 +1,24 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model media {
+  id  Int    @id @default(autoincrement())
+  url String
+
+  actual_source   String? // The actual source of the media, the original upload location (if known)
+  original_source String // The original URL used to download the media, basically where it was found
+
+  size Int
+  type String
+
+  meta     Json
+  uploader String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
