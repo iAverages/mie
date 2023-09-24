@@ -287,6 +287,8 @@ impl EventHandler for Handler {
                 )
                 .await;
 
+                token.cancel();
+
                 match uploaded_files {
                     Ok(_) => {}
                     Err(why) => {
@@ -303,8 +305,6 @@ impl EventHandler for Handler {
                         return;
                     }
                 };
-
-                token.cancel();
 
                 print!("Upload complete");
                 let upload_complete = upload_start.elapsed().as_secs_f32();
