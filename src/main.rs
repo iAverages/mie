@@ -1,12 +1,13 @@
 // #![feature(async_closure)]
+mod database;
 mod upload;
 
 use pretty_bytes::converter::convert;
-use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
+use std::{fs, process};
 
 use backblaze_b2_client::structs::B2Client;
 use dotenv::dotenv;
@@ -501,6 +502,17 @@ async fn main() {
             println!("Done! Waiting {} seconds", TIME_BETWEEN_B2_AUTH);
         }
     });
+
+    let db = match database::DB::new("").await {
+        Ok(db) => db,
+        Err(why) => {
+            println!("Error creating database: {:?}", why);
+            process::exit(1)
+        }
+    };
+
+    db.add("gay men");
+    db.get_all();
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);

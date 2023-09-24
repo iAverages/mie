@@ -25,3 +25,4 @@ pretty-duration = "0.1.1"
 futures-locks = "0.7.1"
 lockfree = "0.5.1"
 pretty-bytes = "0.2.2"
+sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-native-tls", "mysql"] }
