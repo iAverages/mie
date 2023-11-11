@@ -96,7 +96,7 @@ impl EventHandler for Handler {
 
                 let path = PathBuf::from("/tmp/mie");
                 let downloaded_file = PathBuf::from(&file_name);
-                let ytd = match YoutubeDL::new(&path, args, &url.as_str()) {
+                let ytd = match YoutubeDL::new(&path, args, url.as_str()) {
                     Ok(ytd) => ytd,
                     Err(why) => {
                         println!("Error creating YoutubeDL: {:?}", why);
@@ -131,6 +131,7 @@ impl EventHandler for Handler {
 
                 let download_complete = process_start.elapsed().as_secs_f32();
                 println!("Download complete in {} seconds", download_complete);
+                println!("Checking video duration");
 
                 let crop_start = Instant::now();
 
@@ -138,7 +139,7 @@ impl EventHandler for Handler {
                     "/tmp/mie/".to_string() + &download_name.to_string() + "_cropped.mp4";
 
                 let duration = match Command::new("ffprobe")
-                    .args(&[
+                    .args([
                         "-v",
                         "error",
                         "-show_entries",
@@ -151,10 +152,19 @@ impl EventHandler for Handler {
                 {
                     Ok(duration) => String::from_utf8_lossy(&duration.stdout)
                         .to_string()
+                        .split('.')
+                        .next()
+                        .unwrap()
+                        .to_string()
                         .parse::<i32>()
                         .unwrap_or(-1),
-                    Err(_) => "0".to_string().parse::<i32>().unwrap_or(-1),
+                    Err(err) => {
+                        println!("Error getting video duration: {:?}", err);
+                        -1
+                    }
                 };
+
+                println!("Video duration: {}", duration);
 
                 let mut was_cropped = false;
                 if MAX_CROP_SECONDS > duration && duration > 0 {
@@ -267,7 +277,7 @@ impl EventHandler for Handler {
                                             true,
                                         ),
                                         ("Percentage", &format!("{}%", percentage * 100.0), true),
-                                        ("Speed", &format!("{}", convert(bps as f64)), true),
+                                        ("Speed", &convert(bps as f64).to_string(), true),
                                     ])
                                 })
                             })
@@ -334,11 +344,11 @@ impl EventHandler for Handler {
                 );
 
                 let mut fields = Vec::<(&str, String, bool)>::new();
-                fields.push(("Download", format!("{}", pretty_download), true));
+                fields.push(("Download", pretty_download.to_string(), true));
                 if was_cropped {
-                    fields.push(("Crop", format!("{}", pretty_crop), true));
+                    fields.push(("Crop", pretty_crop.to_string(), true));
                 }
-                fields.push(("Upload", format!("{}", pretty_upload), true));
+                fields.push(("Upload", pretty_upload.to_string(), true));
 
                 let desc = "Original: ".to_owned() + &og_url;
                 let desc = match was_cropped {
@@ -375,9 +385,9 @@ impl EventHandler for Handler {
 
 fn crop_video(file_name: &String, cropped_file_name: &String) -> bool {
     let crop_detech = match Command::new("ffmpeg")
-        .args(&[
+        .args([
             "-i",
-            &file_name,
+            file_name,
             "-t",
             "1",
             "-vf",
@@ -400,35 +410,41 @@ fn crop_video(file_name: &String, cropped_file_name: &String) -> bool {
     let crop = match crop_detech
         .lines()
         .filter(|line| line.contains("crop="))
-        .last()
-        .unwrap()
-        .split("crop=")
-        .last()
-        .unwrap()
-        .split(")")
-        .next()
+        .map(|f| {
+            f.split("crop=")
+                .last()
+                .unwrap()
+                .split(')')
+                .next()
+                .unwrap()
+                .split(':')
+                .map(|f| f.parse::<i32>().unwrap())
+                .reduce(|a, b| (a * b))
+                .unwrap()
+        })
+        .max()
     {
         Some(crop) => crop,
         None => {
-            println!("Error cropping video: {:?}", crop_detech);
+            println!("Error getting crop for video: {:?}", crop_detech);
             return false;
         }
     };
 
     match Command::new("ffmpeg")
-        .args(&[
+        .args([
             "-i",
-            &file_name,
+            file_name,
             "-vf",
             &format!("crop={}", crop),
-            &cropped_file_name,
+            cropped_file_name,
         ])
         .output()
     {
-        Ok(_) => return true,
+        Ok(_) => true,
         Err(why) => {
             println!("Error cropping video: {:?}", why);
-            return false;
+            false
         }
     }
 }
