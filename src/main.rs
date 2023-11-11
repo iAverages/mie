@@ -28,10 +28,11 @@ struct Uploader;
 struct Handler;
 
 impl TypeMapKey for Uploader {
-    type Value = Arc<B2Client>;
+    type Value = Arc<Mutex<B2Client>>;
 }
 
 const MAX_CROP_SECONDS: i32 = 60;
+const TIME_BETWEEN_B2_AUTH: u64 = 79200; // 22 hours
 const EMBED_COLOR: Colour = Colour::new(11762810);
 
 #[async_trait]
@@ -471,14 +472,35 @@ async fn main() {
         .await
         .expect("Err creating client");
 
-    let b2_client = B2Client::new(&b2_key_id, &b2_application_key)
-        .await
-        .unwrap();
+    let b2_client = Arc::new(Mutex::new(
+        B2Client::new(&b2_key_id.clone(), &b2_application_key.clone())
+            .await
+            .unwrap(),
+    ));
 
     {
         let mut data = client.data.write().await;
-        data.insert::<Uploader>(Arc::new(b2_client));
+        data.insert::<Uploader>(b2_client.clone());
     }
+
+    tokio::spawn(async move {
+        println!("Starting reauth thread");
+        let key_id = &b2_key_id.clone();
+        let application_key = &b2_application_key.clone();
+        let b2_client = &b2_client.clone();
+        loop {
+            tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_B2_AUTH)).await;
+            println!("Reauthorizing B2 account");
+            b2_client
+                .lock()
+                .await
+                .authorize_account(key_id, application_key)
+                .await
+                .expect("Could not authorize B2 account");
+
+            println!("Done! Waiting {} seconds", TIME_BETWEEN_B2_AUTH);
+        }
+    });
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);

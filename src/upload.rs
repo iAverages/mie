@@ -37,13 +37,13 @@ pub struct UploadFile {
 }
 
 pub async fn upload_files<F>(
-    client: Arc<B2Client>,
+    client: Arc<Mutex<B2Client>>,
     bucket_id: Arc<str>,
     files: Vec<UploadFile>,
     on_chunk: Option<F>,
 ) -> DynamicResult<Vec<DynamicResult<B2File>>>
 where
-    F: Fn(&str, u64, u64, f32, u64, u64) -> () + Send + Sync + 'static,
+    F: Fn(&str, u64, u64, f32, u64, u64) + Send + Sync + 'static,
 {
     let callback = Arc::new(on_chunk);
     let mut join_handles: Vec<JoinHandle<DynamicResult<B2File>>> = vec![];
@@ -183,12 +183,12 @@ where
 async fn upload_small_file<F>(
     file_path: &str,
     bucket_id: &str,
-    client: Arc<B2Client>,
+    client: Arc<Mutex<B2Client>>,
     optional_info: Option<HashMap<String, serde_json::Value>>,
     on_chunk: Option<F>,
 ) -> DynamicResult<B2File>
 where
-    F: Fn(u64, u64, f32, u64, u64) -> () + Send + Sync + 'static,
+    F: Fn(u64, u64, f32, u64, u64) + Send + Sync + 'static,
 {
     let path = Path::new(file_path);
     let mut file = tokio::fs::File::open(path).await?;
@@ -213,7 +213,11 @@ where
 
     let upload_url_req_body = B2GetUploadUrlBody::builder().bucket_id(bucket_id).build();
 
-    let upload_url_response = client.get_upload_url(upload_url_req_body).await?;
+    let upload_url_response = client
+        .lock()
+        .await
+        .get_upload_url(upload_url_req_body)
+        .await?;
 
     let b2_upload_headers = B2UploadFileHeaders::builder()
         .authorization(upload_url_response.authorization_token)
@@ -253,6 +257,8 @@ where
     });
 
     let file = client
+        .lock()
+        .await
         .upload_file(
             b2_upload_headers,
             backblaze_b2_client::reqwest::Body::wrap_stream(stream),
@@ -264,8 +270,9 @@ where
     Ok(file)
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn upload_large_file_task<F>(
-    client: Arc<B2Client>,
+    client: Arc<Mutex<B2Client>>,
     file_id: String,
     task_chunk: Vec<((u64, u64), u16)>,
     file: &mut File,
@@ -276,9 +283,14 @@ async fn upload_large_file_task<F>(
     file_size: u64,
 ) -> DynamicResult<()>
 where
-    F: Fn(u64, u64, f32, u64, u64) -> () + Send + Sync + 'static,
+    F: Fn(u64, u64, f32, u64, u64) + Send + Sync + 'static,
 {
-    let mut upload_part_url_response = match client.get_upload_part_url(file_id.clone()).await {
+    let mut upload_part_url_response = match client
+        .lock()
+        .await
+        .get_upload_part_url(file_id.clone())
+        .await
+    {
         Ok(resp) => resp,
         Err(err) => return Err::<(), Box<dyn Error + Send + Sync>>(Box::new(err)),
     };
@@ -341,6 +353,8 @@ where
             let stream = backblaze_b2_client::reqwest::Body::wrap_stream(stream);
 
             let result = client
+                .lock()
+                .await
                 .upload_part(
                     upload_part_headers,
                     stream,
@@ -351,11 +365,15 @@ where
             if let Err(error) = result {
                 if let B2BasicError::RequestError(error) = error {
                     if error.status == nonzero!(503u16) {
-                        upload_part_url_response =
-                            match client.get_upload_part_url(file_id.clone()).await {
-                                Ok(resp) => resp,
-                                Err(err) => return Err(Box::new(err)),
-                            };
+                        upload_part_url_response = match client
+                            .lock()
+                            .await
+                            .get_upload_part_url(file_id.clone())
+                            .await
+                        {
+                            Ok(resp) => resp,
+                            Err(err) => return Err(Box::new(err)),
+                        };
 
                         total_uploaded_other
                             .fetch_sub(total_uploaded_here, atomic::Ordering::Relaxed);
@@ -378,12 +396,12 @@ where
 async fn upload_large_file<F>(
     file_path: &str,
     bucket_id: &str,
-    client: Arc<B2Client>,
+    client: Arc<Mutex<B2Client>>,
     optional_info: Option<HashMap<String, serde_json::Value>>,
     on_chunk: Option<F>,
 ) -> DynamicResult<B2File>
 where
-    F: Fn(u64, u64, f32, u64, u64) -> () + Send + Sync + 'static,
+    F: Fn(u64, u64, f32, u64, u64) + Send + Sync + 'static,
 {
     let path = Path::new(file_path);
     let file = File::open(path)?;
@@ -406,7 +424,12 @@ where
         .file_info(optional_info)
         .build();
 
-    let start_large_file_response = match client.start_large_file(start_large_upload_body).await {
+    let start_large_file_response = match client
+        .lock()
+        .await
+        .start_large_file(start_large_upload_body)
+        .await
+    {
         Ok(resp) => resp,
         Err(err) => return Err(Box::new(err)),
     };
@@ -497,6 +520,8 @@ where
     }
 
     let result = client
+        .lock()
+        .await
         .finish_large_file(
             B2FinishLargeFileBody::builder()
                 .file_id(file_id.clone())
