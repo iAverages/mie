@@ -12,7 +12,7 @@ tokio = { version = "1.32.0", features = ["macros", "rt-multi-thread"] }
 url = "2.4.1"
 ytd-rs = {version = "0.1.7", features = ["yt-dlp"] }
 backblaze-b2-client = { git = "https://github.com/SalahaldinBilal/backblaze-b2-client-rs.git", branch = "move"}
-futures = "0.3.28"
+futures = "0.3.29"
 nonzero_ext = "0.3.0"
 tokio-util = "0.7.9"
 dotenv = "0.15.0"
