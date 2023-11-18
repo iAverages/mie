@@ -1,5 +1,6 @@
 // #![feature(async_closure)]
 mod database;
+mod types;
 mod upload;
 
 use pretty_bytes::converter::convert;
@@ -8,6 +9,7 @@ use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
 use std::{fs, process};
+use types::AddMedia;
 
 use backblaze_b2_client::structs::B2Client;
 use dotenv::dotenv;
@@ -25,8 +27,11 @@ use upload::upload_files;
 use url::Url;
 use ytd_rs::{Arg, YoutubeDL};
 
+impl TypeMapKey for database::DB {
+    type Value = database::DB;
+}
+
 struct Uploader;
-struct Handler;
 
 impl TypeMapKey for Uploader {
     type Value = Arc<Mutex<B2Client>>;
@@ -35,6 +40,8 @@ impl TypeMapKey for Uploader {
 const MAX_CROP_SECONDS: i32 = 60;
 const TIME_BETWEEN_B2_AUTH: u64 = 79200; // 22 hours
 const EMBED_COLOR: Colour = Colour::new(11762810);
+
+struct Handler;
 
 #[async_trait]
 impl EventHandler for Handler {
@@ -58,7 +65,7 @@ impl EventHandler for Handler {
 
             let context = context.clone();
             let word = word.clone().to_string();
-            let url = match Url::parse(&word) {
+            let video_url = match Url::parse(&word) {
                 Ok(url) => url,
                 Err(_) => continue,
             };
@@ -98,7 +105,7 @@ impl EventHandler for Handler {
 
                 let path = PathBuf::from("/tmp/mie");
                 let downloaded_file = PathBuf::from(&file_name);
-                let ytd = match YoutubeDL::new(&path, args, url.as_str()) {
+                let ytd = match YoutubeDL::new(&path, args, video_url.as_str()) {
                     Ok(ytd) => ytd,
                     Err(why) => {
                         println!("Error creating YoutubeDL: {:?}", why);
@@ -358,6 +365,8 @@ impl EventHandler for Handler {
                     false => desc,
                 };
 
+                let file_size = fs::metadata(&file_name).unwrap().len();
+
                 fs::remove_file(file_name.clone()).unwrap_or_else(|_| {
                     println!("Could not remove file: {}", &file_name);
                 });
@@ -365,6 +374,11 @@ impl EventHandler for Handler {
                     println!("Could not remove file: {}", &cropped_file_name);
                 });
                 println!("done");
+
+                let db = client
+                    .get::<database::DB>()
+                    .expect("Expected DB in TypeMap.");
+
                 update_message
                     .edit(&context.http, |m| {
                         m.embed(|e| {
@@ -376,6 +390,17 @@ impl EventHandler for Handler {
                     })
                     .await
                     .unwrap();
+
+                db.add(AddMedia {
+                    file_type: "video/mp4".to_string(),
+                    url: og_url.clone(),
+                    actual_source: None,
+                    original_source: video_url.to_string(),
+                    size: file_size as i32,
+                    meta: serde_json::Value::Null,
+                    uploader: msg.author.id.to_string(),
+                })
+                .await;
             });
         }
     }
@@ -409,29 +434,35 @@ fn crop_video(file_name: &String, cropped_file_name: &String) -> bool {
     };
 
     let crop_detech = String::from_utf8_lossy(&crop_detech.stderr);
-    let crop = match crop_detech
+
+    let crop_w_h = match crop_detech
         .lines()
         .filter(|line| line.contains("crop="))
         .map(|f| {
-            f.split("crop=")
+            let crop = f
+                .split("crop=")
                 .last()
                 .unwrap()
-                .split(')')
-                .next()
-                .unwrap()
                 .split(':')
-                .map(|f| f.parse::<i32>().unwrap())
-                .reduce(|a, b| (a * b))
-                .unwrap()
+                .map(|f| f.parse::<i32>().unwrap());
+
+            let crop_w_h = crop.clone().take(2).reduce(|a, b| (a * b)).unwrap();
+            (crop_w_h, crop)
         })
-        .max()
+        .max_by(|a, b| a.0.cmp(&b.0))
     {
-        Some(crop) => crop,
+        Some((_, crop)) => crop.collect::<Vec<i32>>(),
         None => {
-            println!("Error getting crop for video: {:?}", crop_detech);
+            println!("Could not find crop");
             return false;
         }
     };
+
+    let offset = 40;
+    let (crop_w, crop_x) = get_crop_size(crop_w_h[0], crop_w_h[2], offset);
+    let (crop_h, crop_y) = get_crop_size(crop_w_h[1], crop_w_h[3], offset);
+
+    let crop = format!("{}:{}:{}:{}", crop_w, crop_h, crop_x, crop_y);
 
     match Command::new("ffmpeg")
         .args([
@@ -443,12 +474,37 @@ fn crop_video(file_name: &String, cropped_file_name: &String) -> bool {
         ])
         .output()
     {
-        Ok(_) => true,
+        Ok(out) => {
+            if !out.status.success() {
+                println!("Error cropping video: {:?}", out);
+                return false;
+            }
+
+            true
+        }
         Err(why) => {
             println!("Error cropping video: {:?}", why);
             false
         }
     }
+}
+
+fn get_crop_size(dim: i32, pos: i32, unit: i32) -> (i32, i32) {
+    if pos == 0 {
+        return (dim, pos);
+    }
+
+    let mut changed_by = unit;
+    let mut new_pos = pos - changed_by;
+
+    if new_pos < 0 {
+        new_pos = 0;
+        changed_by = new_pos.abs();
+    }
+
+    let new_dim = dim + changed_by;
+
+    (new_dim, new_pos)
 }
 
 #[tokio::main]
@@ -458,12 +514,22 @@ async fn main() {
     let b2_key_id = env::var("B2_APPLICATION_KEY_ID").expect("No B2 key ID provided");
     let b2_application_key =
         env::var("B2_APPLICATION_KEY").expect("No B2 application key provided");
+    let database_url = env::var("DATABASE_URL").expect("No database URL provided");
 
     env::var("B2_BUCKET_NAME").expect("B2_BUCKET_NAME not set");
     env::var("B2_APPLICATION_KEY").expect("B2_APPLICATION_KEY not set");
     env::var("B2_URL").expect("B2_URL not set");
 
     println!("Starting up...");
+    println!("Connecting to database");
+
+    let db = match database::DB::new(&database_url).await {
+        Ok(db) => db,
+        Err(why) => {
+            println!("Error creating database: {:?}", why);
+            process::exit(1)
+        }
+    };
 
     let intents = GatewayIntents::GUILD_MESSAGES
         | GatewayIntents::DIRECT_MESSAGES
@@ -482,6 +548,7 @@ async fn main() {
     {
         let mut data = client.data.write().await;
         data.insert::<Uploader>(b2_client.clone());
+        data.insert::<database::DB>(db);
     }
 
     tokio::spawn(async move {
@@ -502,17 +569,6 @@ async fn main() {
             println!("Done! Waiting {} seconds", TIME_BETWEEN_B2_AUTH);
         }
     });
-
-    let db = match database::DB::new("").await {
-        Ok(db) => db,
-        Err(why) => {
-            println!("Error creating database: {:?}", why);
-            process::exit(1)
-        }
-    };
-
-    db.add("gay men");
-    db.get_all();
 
     if let Err(why) = client.start().await {
         println!("Client error: {:?}", why);

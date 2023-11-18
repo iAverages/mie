@@ -26,3 +26,5 @@ futures-locks = "0.7.1"
 lockfree = "0.5.1"
 pretty-bytes = "0.2.2"
 sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-native-tls", "mysql"] }
+chrono = { version = "0.4.31", features = ["serde"] }
+serde = "1.0.192"

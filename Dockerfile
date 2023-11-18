@@ -34,7 +34,7 @@ FROM --platform=$TARGETPLATFORM alpine:3.18.4 AS ytdlp
 RUN apk update && apk add wget \
     && wget https://github.com/yt-dlp/yt-dlp/releases/download/2023.07.06/yt-dlp_linux_aarch64 -O /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp \
-    && wget https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linuxarm64-gpl.tar.xz -O /tmp/ffmpeg.tar.xz \
+    && wget https://github.com/yt-dlp/FFmpeg-Builds/releases/download/autobuild-2023-11-17-14-20/ffmpeg-n6.0.1-linuxarm64-gpl-6.0.tar.xz -O /tmp/ffmpeg.tar.xz \
     && tar -xf /tmp/ffmpeg.tar.xz -C /tmp --strip-components=1 \
     && rm -rf /tmp/ffmpeg.tar.xz
 

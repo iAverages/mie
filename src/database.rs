@@ -1,3 +1,5 @@
+use crate::types::AddMedia;
+
 use sqlx::MySqlPool;
 
 pub struct DB {
@@ -19,7 +21,25 @@ impl DB {
         vec!["gay".to_string()]
     }
 
-    pub fn add(&self, link: &str) {
-        println!("added {}", link);
+    pub async fn add(&self, media: AddMedia) -> u64 {
+        let res = sqlx::query!(
+            "INSERT INTO media 
+        (url, actual_source, original_source, size, type, meta, uploader)
+        VALUES (?,?,?,?,?,?,?)",
+            media.url,
+            media.actual_source,
+            media.original_source,
+            media.size,
+            media.file_type,
+            media.meta,
+            media.uploader,
+        )
+        .execute(&self.pool)
+        .await
+        .unwrap();
+
+        println!("Adding media: {:?}", res);
+
+        res.last_insert_id()
     }
 }
