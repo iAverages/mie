@@ -36,6 +36,7 @@
         packages = with pkgs; [
           pkg-config
           openssl
+          ffmpeg
           (rust-bin.stable.latest.default.override {
             extensions = [
               "rust-src"

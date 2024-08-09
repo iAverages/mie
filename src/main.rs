@@ -1,11 +1,13 @@
 // #![feature(async_closure)]
 mod database;
+mod embed;
+mod ffmpeg;
 mod types;
 mod upload;
 
+use ffmpeg::crop_video;
 use pretty_bytes::converter::convert;
-use std::path::PathBuf;
-use std::process::{Command, Stdio};
+use std::process::Command;
 use std::time::{Duration, Instant};
 use std::{env, sync::Arc};
 use std::{fs, process};
@@ -25,7 +27,6 @@ use tokio::task;
 use tokio_util::sync::CancellationToken;
 use upload::upload_files;
 use url::Url;
-use ytd_rs::{Arg, YoutubeDL};
 
 impl TypeMapKey for database::DB {
     type Value = database::DB;
@@ -64,14 +65,15 @@ impl EventHandler for Handler {
             }
 
             let context = context.clone();
-            let word = word.clone().to_string();
-            let video_url = match Url::parse(&word) {
+            let video_url = match Url::parse(word) {
                 Ok(url) => url,
                 Err(_) => continue,
             };
 
             task::spawn(async move {
                 let process_start = Instant::now();
+
+                // Ensure we have permissions to send messages in this channel
                 let message_result = msg
                     .channel_id
                     .send_message(&context.http, |m| {
@@ -79,6 +81,7 @@ impl EventHandler for Handler {
                     })
                     .await;
 
+                // If we can't send a messages, exist early
                 let mut update_message = match message_result {
                     Ok(m) => m,
                     Err(why) => {
@@ -93,53 +96,26 @@ impl EventHandler for Handler {
                     .map(char::from)
                     .collect();
 
-                let file_name = "/tmp/mie/".to_string() + &download_name.to_string() + ".mp4";
-
-                let args = vec![
-                    Arg::new_with_arg(
-                        "-f",
-                        "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-                    ),
-                    Arg::new_with_arg("-o", &file_name),
-                ];
-
-                let path = PathBuf::from("/tmp/mie");
-                let downloaded_file = PathBuf::from(&file_name);
-                let ytd = match YoutubeDL::new(&path, args, video_url.as_str()) {
-                    Ok(ytd) => ytd,
-                    Err(why) => {
-                        println!("Error creating YoutubeDL: {:?}", why);
-                        update_message
-                            .edit(&context.http, |m| {
-                                m.embed(|e| {
-                                    e.title("Error downloading video YTDL_INIT_ERROR")
-                                        .color(EMBED_COLOR)
-                                })
-                            })
-                            .await
-                            .unwrap();
-                        return;
-                    }
-                };
-                match ytd.download() {
-                    Ok(_) => {}
+                let downloaded_video = match ffmpeg::download_video(
+                    &download_name,
+                    &video_url.to_string(),
+                    &process_start,
+                    &mut update_message,
+                    &context,
+                )
+                .await
+                {
+                    Ok(video) => video,
                     Err(why) => {
                         println!("Error downloading video: {:?}", why);
-                        update_message
-                            .edit(&context.http, |m| {
-                                m.embed(|e| {
-                                    e.title("Error downloading video YTDL_DOWNLOAD_ERROR")
-                                        .color(EMBED_COLOR)
-                                })
-                            })
-                            .await
-                            .unwrap();
                         return;
                     }
                 };
 
-                let download_complete = process_start.elapsed().as_secs_f32();
-                println!("Download complete in {} seconds", download_complete);
+                println!(
+                    "Download complete in {} seconds",
+                    downloaded_video.download_time
+                );
                 println!("Checking video duration");
 
                 let crop_start = Instant::now();
@@ -155,12 +131,11 @@ impl EventHandler for Handler {
                         "format=duration",
                         "-of",
                         "default=noprint_wrappers=1:nokey=1",
-                        &file_name,
+                        &downloaded_video.path,
                     ])
                     .output()
                 {
                     Ok(duration) => String::from_utf8_lossy(&duration.stdout)
-                        .to_string()
                         .split('.')
                         .next()
                         .unwrap()
@@ -178,7 +153,7 @@ impl EventHandler for Handler {
                 let mut was_cropped = false;
                 if MAX_CROP_SECONDS > duration && duration > 0 {
                     println!("Video is {} seconds, cropping", duration);
-                    was_cropped = crop_video(&file_name, &cropped_file_name);
+                    was_cropped = crop_video(&downloaded_video.path, &cropped_file_name);
                 }
 
                 let crop_complete = crop_start.elapsed().as_secs_f32();
@@ -201,12 +176,12 @@ impl EventHandler for Handler {
                 let bucket_str = env::var("B2_BUCKET_ID").expect("No B2 bucket ID provided");
                 let bucket_id = Arc::new(bucket_str).as_str().into();
 
-                println!("Uploading file: {}", downloaded_file.display());
+                println!("Uploading file: {}", downloaded_video.path);
 
                 let mut files_to_upload = Vec::<upload::UploadFile>::new();
 
                 files_to_upload.push(upload::UploadFile {
-                    path: downloaded_file.into_os_string().into_string().unwrap(),
+                    path: downloaded_video.path.clone(),
                     extra_info: None,
                 });
 
@@ -340,7 +315,7 @@ impl EventHandler for Handler {
                 });
 
                 let pretty_download = pretty_duration(
-                    &Duration::from_secs_f64(download_complete as f64),
+                    &Duration::from_secs_f64(downloaded_video.download_time as f64),
                     format_options.clone(),
                 );
                 let pretty_crop = pretty_duration(
@@ -365,10 +340,10 @@ impl EventHandler for Handler {
                     false => desc,
                 };
 
-                let file_size = fs::metadata(&file_name).unwrap().len();
+                let file_size = fs::metadata(&downloaded_video.path).unwrap().len();
 
-                fs::remove_file(file_name.clone()).unwrap_or_else(|_| {
-                    println!("Could not remove file: {}", &file_name);
+                fs::remove_file(downloaded_video.path.clone()).unwrap_or_else(|_| {
+                    println!("Could not remove file: {}", &downloaded_video.path);
                 });
                 fs::remove_file(&cropped_file_name).unwrap_or_else(|_| {
                     println!("Could not remove file: {}", &cropped_file_name);
@@ -408,103 +383,6 @@ impl EventHandler for Handler {
     async fn ready(&self, _: Context, ready: Ready) {
         println!("{} is connected!", ready.user.name);
     }
-}
-
-fn crop_video(file_name: &String, cropped_file_name: &String) -> bool {
-    let crop_detech = match Command::new("ffmpeg")
-        .args([
-            "-i",
-            file_name,
-            "-t",
-            "1",
-            "-vf",
-            "cropdetect",
-            "-f",
-            "null",
-            "-",
-        ])
-        .stdout(Stdio::piped())
-        .output()
-    {
-        Ok(crop_detech) => crop_detech,
-        Err(why) => {
-            println!("Error cropping video: {:?}", why);
-            return false;
-        }
-    };
-
-    let crop_detech = String::from_utf8_lossy(&crop_detech.stderr);
-
-    let crop_w_h = match crop_detech
-        .lines()
-        .filter(|line| line.contains("crop="))
-        .map(|f| {
-            let crop = f
-                .split("crop=")
-                .last()
-                .unwrap()
-                .split(':')
-                .map(|f| f.parse::<i32>().unwrap());
-
-            let crop_w_h = crop.clone().take(2).reduce(|a, b| (a * b)).unwrap();
-            (crop_w_h, crop)
-        })
-        .max_by(|a, b| a.0.cmp(&b.0))
-    {
-        Some((_, crop)) => crop.collect::<Vec<i32>>(),
-        None => {
-            println!("Could not find crop");
-            return false;
-        }
-    };
-
-    let offset = 40;
-    let (crop_w, crop_x) = get_crop_size(crop_w_h[0], crop_w_h[2], offset);
-    let (crop_h, crop_y) = get_crop_size(crop_w_h[1], crop_w_h[3], offset);
-
-    let crop = format!("{}:{}:{}:{}", crop_w, crop_h, crop_x, crop_y);
-
-    match Command::new("ffmpeg")
-        .args([
-            "-i",
-            file_name,
-            "-vf",
-            &format!("crop={}", crop),
-            cropped_file_name,
-        ])
-        .output()
-    {
-        Ok(out) => {
-            if !out.status.success() {
-                println!("Error cropping video: {:?}", out);
-                return false;
-            }
-
-            true
-        }
-        Err(why) => {
-            println!("Error cropping video: {:?}", why);
-            false
-        }
-    }
-}
-
-fn get_crop_size(dim: i32, pos: i32, unit: i32) -> (i32, i32) {
-    if pos == 0 {
-        return (dim, pos);
-    }
-
-    let mut changed_by = unit;
-    let mut new_pos = pos - changed_by;
-
-    if new_pos < 0 {
-        new_pos = 0;
-        changed_by = new_pos.abs();
-    }
-
-    let new_dim = dim + changed_by;
-
-    (new_dim, new_pos)
 }
 
 #[tokio::main]

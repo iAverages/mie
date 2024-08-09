@@ -28,3 +28,9 @@ pub struct AddMedia {
     pub meta: serde_json::Value,
     pub uploader: String,
 }
+
+pub struct DownloadedVideo {
+    pub path: String,
+    pub video_url: String,
+    pub download_time: f32,
+}

@@ -12,6 +12,7 @@ tokio = { version = "1.34.0", features = ["macros", "rt-multi-thread"] }
 url = "2.4.1"
 ytd-rs = {version = "0.1.7", features = ["yt-dlp"] }
 backblaze-b2-client = { git = "ssh://git@github.com/SalahaldinBilal/backblaze-b2-client-rs.git", branch = "move"}
+backblaze-b2-client_https = { git = "https://github.com/SalahaldinBilal/backblaze-b2-client-rs.git", branch = "move"}
 futures = "0.3.29"
 nonzero_ext = "0.3.0"
 tokio-util = "0.7.10"
@@ -28,3 +29,28 @@ pretty-bytes = "0.2.2"
 sqlx = { version = "0.7", features = [ "runtime-tokio", "tls-native-tls", "mysql"] }
 chrono = { version = "0.4.31", features = ["serde"] }
 serde = "1.0.192"
+anyhow = "1.0.86"
+
+[features]
+default = [
+    "serde",
+    "serde_json",
+    "url",
+    "ytd-rs",
+    "backblaze-b2-client",
+    "futures",
+    "nonzero_ext",
+    "tokio-util",
+    "dotenv",
+    "sha1_smol",
+    "async-stream",
+    "openssl",
+    "pretty-duration",
+    "futures-locks",
+    "lockfree",
+    "pretty-bytes",
+    "sqlx",
+    "chrono",
+    "anyhow",
+]
+b2_https = ["backblaze-b2-client_https"]

@@ -1,6 +1,6 @@
 ARG DEBIAN_VERSION="12.1"
 
-FROM --platform=$BUILDPLATFORM rust:1.73.0-slim-bookworm AS build
+FROM --platform=$BUILDPLATFORM rust:1.79.0-slim-bookworm AS build
 
 WORKDIR /app 
 
@@ -9,7 +9,7 @@ RUN dpkg --add-architecture arm64
 
 RUN apt-get update && \
     apt-get install --yes \
-    git build-essential crossbuild-essential-arm64 \
+    git build-essential crossbuild-essential-arm64 pkg-config libssl-dev \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
@@ -24,6 +24,8 @@ RUN git config --global credential.helper 'store --file /root/.git-credentials'
 
 COPY Cargo.toml Cargo.lock ./
 
+COPY .env .
+
 COPY src ./src
 
 RUN CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --release --target aarch64-unknown-linux-gnu
@@ -34,7 +36,7 @@ FROM --platform=$TARGETPLATFORM alpine:3.18.4 AS ytdlp
 RUN apk update && apk add wget libressl-dev pkgconfig \
     && wget https://github.com/yt-dlp/yt-dlp/releases/download/2023.11.16/yt-dlp_linux_aarch64 -O /usr/local/bin/yt-dlp \
     && chmod +x /usr/local/bin/yt-dlp \
-    && wget https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-n6.1-latest-linuxarm64-gpl-6.1.tar.xz -O /tmp/ffmpeg.tar.xz \
+    && wget https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-n7.0-latest-linuxarm64-gpl-7.0.tar.xz -O /tmp/ffmpeg.tar.xz \
     && tar -xf /tmp/ffmpeg.tar.xz -C /tmp --strip-components=1 \
     && rm -rf /tmp/ffmpeg.tar.xz
 
