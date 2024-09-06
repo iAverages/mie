@@ -1,6 +1,6 @@
 ARG DEBIAN_VERSION="12.1"
 
-FROM --platform=$BUILDPLATFORM rust:1.79.0-slim-bookworm AS build
+FROM --platform=$BUILDPLATFORM rust:1.81.0-slim-bookworm AS build
 
 WORKDIR /app 
 
