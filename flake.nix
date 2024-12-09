@@ -30,18 +30,21 @@
       system,
     }: {
       default = pkgs.mkShell {
-  shellHook = ''
-  export  PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig";
-'';
+        shellHook = ''
+          export  PKG_CONFIG_PATH="${pkgs.openssl.dev}/lib/pkgconfig";
+        '';
         packages = with pkgs; [
           pkg-config
           openssl
           ffmpeg
+          gcc
+          just
           (rust-bin.stable.latest.default.override {
             extensions = [
               "rust-src"
               "rust-analyzer"
             ];
+            targets = ["aarch64-unknown-linux-gnu"];
           })
         ];
       };

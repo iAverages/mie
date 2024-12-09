@@ -83,6 +83,10 @@ impl MieEmbed {
         Ok(message)
     }
 
+    pub fn build(&mut self) -> Embed {
+        self.embed.clone()
+    }
+
     fn default_embed() -> Embed {
         Embed {
             author: None,
