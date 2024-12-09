@@ -24,3 +24,6 @@ serde = "1.0.215"
 urlencoding = "2.1.3"
 sha1_smol = "1.0.1"
 async-stream = "0.3.6"
+openssl = { version = "0.10", features = ["vendored"] }
+vesper = "0.13.0"
+reqwest = { version = "0.12.9", features = ["json"] }

@@ -1,19 +1,13 @@
 use std::sync::Arc;
-use std::thread::sleep;
-use std::time::Duration;
-
-use rand::distributions::Alphanumeric;
-use rand::Rng;
-
 use tokio::time::Instant;
 use twilight_model::channel::message::embed::EmbedField;
 use twilight_model::gateway::payload::incoming::MessageCreate;
-use url::Url;
 
 use crate::embed::MieEmbed;
 use crate::upload::{self, upload_files};
 use crate::video::download_video;
 use crate::AppContext;
+use url::Url;
 
 // Wrapper function that handles errors for this event handler
 pub async fn handle_message_create(ctx: Arc<AppContext>, event: MessageCreate) {
@@ -49,21 +43,7 @@ async fn handle_message_create_inner(
             .send_or_update()
             .await?;
 
-        let download_name: String = rand::thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(7)
-            .map(char::from)
-            .collect();
-
-        tracing::info!(word, download_name, "Downloading");
-
-        let downloaded_video = download_video(&download_name, &video_url.to_string()).await?;
-
-        tracing::info!(
-            word,
-            "Downloading took {}ms",
-            downloaded_video.download_time
-        );
+        let downloaded_video = download_video(&video_url.to_string()).await?;
 
         embed
             .title("Video Downloading, uploading original...".to_string())
@@ -141,7 +121,7 @@ async fn handle_message_create_inner(
         embed
             .title(format!(
                 "Download: https://cdn.avrg.dev/{}/{}.mp4",
-                ctx.config.b2_bucket_path_prefix, download_name
+                ctx.config.b2_bucket_path_prefix, downloaded_video.downloaded_file_name
             ))
             .update_field(
                 1,
