@@ -31,7 +31,7 @@ COPY src ./src
 RUN CARGO_NET_GIT_FETCH_WITH_CLI=true cargo build --release --target aarch64-unknown-linux-gnu
 
 
-FROM --platform=$TARGETPLATFORM alpine:3.18.4 AS ytdlp
+FROM --platform=$TARGETPLATFORM alpine:3.21.2 AS ytdlp
 
 RUN apk update && apk add wget libressl-dev pkgconfig \
     && wget https://github.com/yt-dlp/yt-dlp/releases/download/2023.11.16/yt-dlp_linux_aarch64 -O /usr/local/bin/yt-dlp \
