@@ -41,11 +41,13 @@ impl MieEmbed {
         self
     }
 
+    #[allow(dead_code)]
     pub fn remove_field(&mut self, index: usize) -> &mut Self {
         self.embed.fields.remove(index);
         self
     }
 
+    #[allow(dead_code)]
     pub fn reset_fields(&mut self) -> &mut Self {
         self.embed.fields = vec![];
         self

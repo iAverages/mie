@@ -1,10 +1,13 @@
 use rand::distributions::Alphanumeric;
 use rand::Rng;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::Instant;
 
 use ytd_rs::{Arg, YoutubeDL};
 
+use crate::errors::MieError;
+
+#[derive(Debug)]
 pub struct DownloadedVideo {
     pub og_url: String,
     pub path: String,
@@ -12,7 +15,7 @@ pub struct DownloadedVideo {
     pub downloaded_file_name: String,
 }
 
-pub async fn download_video(video_url: &String) -> Result<DownloadedVideo, anyhow::Error> {
+pub async fn download_video(video_url: &String) -> Result<DownloadedVideo, MieError> {
     let download_name: String = rand::thread_rng()
         .sample_iter(&Alphanumeric)
         .take(7)
@@ -32,16 +35,22 @@ pub async fn download_video(video_url: &String) -> Result<DownloadedVideo, anyho
     ];
 
     let path = PathBuf::from("/tmp/mie");
-    let ytd = YoutubeDL::new(&path, args, video_url.as_str())?;
-    ytd.download()?;
+    let ytd = YoutubeDL::new(&path, args, video_url.as_str()).map_err(MieError::YtDlError)?;
+    let _ = ytd.download().map_err(MieError::YtDlError);
 
     let download_time = process_start.elapsed().as_millis();
     tracing::info!(video_url, "Downloading took {}ms", download_time);
 
-    Ok(DownloadedVideo {
+    let downloaded_video = DownloadedVideo {
         path: file_name,
         og_url: video_url.to_string(),
         download_time,
         downloaded_file_name: download_name,
-    })
+    };
+
+    if !Path::new(&downloaded_video.path).is_file() {
+        return Err(MieError::VideoDownloadFailed(downloaded_video));
+    }
+
+    Ok(downloaded_video)
 }

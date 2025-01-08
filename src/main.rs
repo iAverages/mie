@@ -1,11 +1,11 @@
 mod commands;
 mod embed;
 mod env;
+mod errors;
 mod event_handlers;
 mod upload;
 mod video;
 
-use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
@@ -15,11 +15,9 @@ use serde::Serialize;
 use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 use twilight_gateway::{ConfigBuilder, Event, EventTypeFlags, Intents, Shard, ShardId};
-use twilight_http::request::{Request, TryIntoRequest};
 use twilight_http::routing::Route;
 use twilight_http::Client as HttpClient;
 use twilight_model::application::command::{CommandOption, CommandType};
-use twilight_model::guild::Permissions;
 use twilight_model::id::marker::ApplicationMarker;
 use twilight_model::id::Id;
 use vesper::prelude::Framework;
@@ -111,8 +109,7 @@ async fn main() -> anyhow::Result<()> {
         .to_string();
 
         tracing::info!("creating {} command", cmd.name);
-        let a = c
-            .post(format!("https://discord.com/api/v10/{}", path))
+        c.post(format!("https://discord.com/api/v10/{}", path))
             .header("Authorization", format!("Bot {}", config.discord_token))
             .json(&GlobalCommandBody {
                 application_id: Some(app_id),
