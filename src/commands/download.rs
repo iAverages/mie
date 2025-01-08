@@ -6,6 +6,7 @@ use url::Url;
 use vesper::prelude::*;
 
 use crate::embed::MieEmbed;
+use crate::errors::MieError;
 use crate::upload::{self, upload_files};
 use crate::video::download_video;
 use crate::AppContext;
@@ -17,6 +18,57 @@ pub async fn download(
     #[description = "URL To Download"] url: String,
     #[description = "Extra text to inlude in message"] content: Option<String>,
 ) -> DefaultCommandResult {
+    match download_inner(ctx, url, content).await {
+        Ok(val) => Ok(val),
+        // Err(MieError::VideoDownloadFailed(video)) => {
+        //     let channel = ctx.interaction.channel.clone().unwrap();
+        //     let channel_id = channel.id;
+        //     let mut embed = MieEmbed::new(ctx.data.clone(), channel_id);
+        //     ctx.interaction_client
+        //         .update_response(&ctx.interaction.token)
+        //         .embeds(Some(&[embed
+        //             .title("An error occured while downloading video".to_string())
+        //             .build()]))?
+        //         .await?;
+        //
+        //     Err(video)
+        // }
+        Err(err) => {
+            let channel = ctx.interaction.channel.clone().unwrap();
+            let channel_id = channel.id;
+            let mut embed = MieEmbed::new(ctx.data.clone(), channel_id);
+            let error_embed;
+
+            if let Some(mie_error) = err.downcast_ref::<MieError>() {
+                match mie_error {
+                    MieError::VideoDownloadFailed(video) => {
+                        error_embed =
+                            embed.title(format!("failed to download video: {}", video.og_url));
+                    }
+                    MieError::YtDlError(_) => {
+                        error_embed = embed.title("ytdlp errored".to_string());
+                    }
+                }
+            } else {
+                tracing::error!("unhandled error: {}", err.to_string());
+                error_embed = embed.title("An error occured while downloading video".to_string());
+            }
+
+            ctx.interaction_client
+                .update_response(&ctx.interaction.token)
+                .embeds(Some(&[error_embed.build()]))?
+                .await?;
+            Err(err)
+        }
+    }
+}
+
+use std::error::Error;
+async fn download_inner(
+    ctx: &mut SlashContext<'_, Arc<AppContext>>,
+    url: String,
+    content: Option<String>,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
     ctx.defer(true).await?;
     let is_http = url.starts_with("https://") || url.starts_with("http://");
 
@@ -100,14 +152,6 @@ pub async fn download(
                     EmbedField {
                         name: "Upload".to_string(),
                         value: "Error".to_string(),
-                        inline: true,
-                    },
-                )
-                .update_field(
-                    2,
-                    EmbedField {
-                        name: "Crop".to_string(),
-                        value: "Cancelled".to_string(),
                         inline: true,
                     },
                 )
