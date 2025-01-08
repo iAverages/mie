@@ -13,7 +13,7 @@ RUN --mount=type=ssh --mount=type=cache,target=/app/target cargo build --release
 RUN --mount=type=cache,target=/app/target cp target/aarch64-unknown-linux-gnu/release/mie .
 RUN --mount=type=cache,target=/app/target file mie
 
-FROM --platform=$TARGETPLATFORM debian:12.1-slim
+FROM debian:12.1-slim
 ENV RUST_BACKTRACE=full
 WORKDIR /app
 
