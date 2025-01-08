@@ -1,4 +1,4 @@
-FROM --platform=$BUILDPLATFORM rust:1.80.0 AS rust
+FROM --platform=$BUILDPLATFORM rust:1.83.0 AS rust
 ARG TARGETPLATFORM
 
 RUN rustup target add aarch64-unknown-linux-gnu
