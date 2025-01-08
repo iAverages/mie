@@ -1,3 +1,4 @@
+use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -138,6 +139,8 @@ async fn download_inner(
         }),
     )
     .await;
+
+    let _ = fs::remove_file(downloaded_video.path);
 
     let upload_time = upload_start.elapsed().as_millis();
 
