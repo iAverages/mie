@@ -12,7 +12,7 @@ ytd-rs = { version = "0.1.7", features = ["yt-dlp"] }
 backblaze-b2-client = { git = "ssh://git@github.com/SalahaldinBilal/backblaze-b2-client-rs.git", branch = "move" }
 twilight-gateway = "0.15.4"
 twilight-http = "0.15.4"
-twilight-model = "0.15.4"
+twilight-model = "0.16.0"
 dotenvy = "0.15.7"
 url = "2.5.4"
 rand = "0.8.5"
