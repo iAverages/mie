@@ -11,7 +11,7 @@ tracing-subscriber = { version = "0.3.18", features = ["env-filter"] }
 ytd-rs = { version = "0.1.7", features = ["yt-dlp"] }
 backblaze-b2-client = { git = "ssh://git@github.com/SalahaldinBilal/backblaze-b2-client-rs.git", branch = "move" }
 twilight-gateway = "0.15.4"
-twilight-http = "0.15.4"
+twilight-http = "0.16.0"
 twilight-model = "0.15.4"
 dotenvy = "0.15.7"
 url = "2.5.4"
