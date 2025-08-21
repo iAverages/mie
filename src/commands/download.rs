@@ -117,7 +117,6 @@ async fn download_inner(
 
     let files = vec![upload::UploadFile {
         path: downloaded_video.path.clone(),
-        extra_info: None,
     }];
 
     let bucket = Arc::new(ctx.data.config.b2_bucket_id.clone())

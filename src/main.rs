@@ -8,11 +8,9 @@ mod video;
 
 use std::error::Error;
 use std::sync::Arc;
-use std::time::Duration;
 
-use backblaze_b2_client::structs::B2Client;
+use backblaze_b2_client::client::B2Client;
 use serde::Serialize;
-use tokio::sync::Mutex;
 use tracing_subscriber::EnvFilter;
 use twilight_gateway::{ConfigBuilder, Event, EventTypeFlags, Intents, Shard, ShardId};
 use twilight_http::routing::Route;
@@ -29,24 +27,19 @@ use self::event_handlers::messsage_create::handle_message_create;
 pub struct AppContext {
     config: Config,
     http: Arc<HttpClient>,
-    b2: Arc<Mutex<B2Client>>,
+    b2: Arc<B2Client>,
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // Load .env first as RUST_LOG is pulled from there in development
     load_env()?;
 
-    // Initialize the tracing subscriber.
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .init();
 
     let config = create_config();
 
-    // Use intents to only receive guild message events.
-    // Use Configbuilder to ignore unwanted events that
-    // get included from intents (such as MESSAGE_UPDATE)
     let shard_config = ConfigBuilder::new(
         config.discord_token.clone(),
         Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT | Intents::DIRECT_MESSAGES,
@@ -61,19 +54,15 @@ async fn main() -> anyhow::Result<()> {
 
     let mut shard = Shard::with_config(ShardId::ONE, shard_config);
 
-    let b2 = Arc::new(Mutex::new(
-        B2Client::new(
-            &config.b2_key_id.clone(),
-            &config.b2_application_key.clone(),
-        )
-        .await
-        .unwrap(),
-    ));
+    let b2 = Arc::new(
+        B2Client::new(config.b2_key_id.clone(), config.b2_application_key.clone())
+            .await
+            .unwrap(),
+    );
 
     // HTTP is separate from the gateway, so create a new client.
     let http = Arc::new(HttpClient::new(config.discord_token.clone()));
 
-    // Get the current bots application id to create slash commands
     let app_id = get_application_id(&http)
         .await
         .expect("Failed to get application id for current bot token");
@@ -81,7 +70,7 @@ async fn main() -> anyhow::Result<()> {
     let app_context = Arc::new(AppContext {
         config: config.clone(),
         http: http.clone(),
-        b2: b2.clone(),
+        b2,
     });
 
     let framework = Arc::new(
@@ -123,10 +112,7 @@ async fn main() -> anyhow::Result<()> {
             .send()
             .await?;
     }
-    // Start B2 Auth task to keep auth token updated
-    b2_auth_task(config.clone(), b2);
 
-    // Process each event as they come in.
     loop {
         match shard.next_event().await {
             Ok(item) => {
@@ -188,29 +174,6 @@ async fn handle_event(
     }
 
     Ok(())
-}
-
-const TIME_BETWEEN_B2_AUTH: u64 = 79200; // 22 hours
-
-fn b2_auth_task(config: Config, b2_client: Arc<Mutex<B2Client>>) {
-    tokio::spawn(async move {
-        tracing::info!("starting reauth thread");
-        let key_id = &config.b2_key_id.clone();
-        let application_key = &config.b2_application_key.clone();
-        let b2_client = &b2_client.clone();
-        loop {
-            tokio::time::sleep(Duration::from_secs(TIME_BETWEEN_B2_AUTH)).await;
-            tracing::info!("reauthorizing B2 account");
-            b2_client
-                .lock()
-                .await
-                .authorize_account(key_id, application_key)
-                .await
-                .expect("Could not authorize B2 account");
-
-            tracing::info!("Done! Waiting {} seconds", TIME_BETWEEN_B2_AUTH);
-        }
-    });
 }
 
 async fn get_application_id(http: &HttpClient) -> anyhow::Result<Id<ApplicationMarker>> {

@@ -67,7 +67,6 @@ async fn handle_message_create_inner(
 
         let files = vec![upload::UploadFile {
             path: downloaded_video.path.clone(),
-            extra_info: None,
         }];
 
         let bucket = Arc::new(ctx.config.b2_bucket_id.clone()).as_str().into();
