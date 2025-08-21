@@ -14,3 +14,4 @@ target/
 docker/credentials
 node_modules/
 .direnv
+result
