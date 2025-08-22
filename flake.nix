@@ -34,35 +34,29 @@
           ];
         })
       ];
+
       runtimeDeps = with pkgs; [
         openssl
-        ffmpeg
+        ffmpeg-headless
         cacert
+        yt-dlp
       ];
     in {
       packages = {
-        default = pkgs.rustPlatform.buildRustPackage {
-          inherit version;
-          pname = "mie";
-          src = ./.;
-          # cargoLock = {
-          #   lockFile = ./Cargo.lock;
-          # };
-          cargoDeps = pkgs. rustPlatform.importCargoLock {
-            lockFile = ./Cargo.lock;
-          };
-          nativeBuildInputs = buildDeps;
-          buildInputs = runtimeDeps;
+        mie = pkgs.callPackage ./bot/nix/default.nix {inherit version buildDeps runtimeDeps;};
+        mieDockerImage = pkgs.callPackage ./bot/nix/docker.nix {
+          inherit version runtimeDeps;
+          app = self.packages.${system}.mie;
         };
-        dockerImage = pkgs.dockerTools.buildLayeredImage {
-          name = "mie";
-          tag = version;
-          config.Cmd = ["${self.packages.${system}.default}/bin/mie"];
-          contents =
-            [
-              self.packages.${system}.default
-            ]
-            ++ runtimeDeps;
+
+        api = pkgs.callPackage ./api/nix/default.nix {
+          inherit version buildDeps;
+          runtimeDeps = [];
+        };
+        apiDockerImage = pkgs.callPackage ./api/nix/docker.nix {
+          inherit version;
+          runtimeDeps = [];
+          app = self.packages.${system}.api;
         };
       };
 
