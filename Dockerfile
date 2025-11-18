@@ -9,8 +9,8 @@ WORKDIR /app
 COPY .cargo ./.cargo
 COPY Cargo.toml Cargo.lock ./
 COPY src ./src
-RUN --mount=type=ssh --mount=type=cache,target=/app/target cargo build --release --target aarch64-unknown-linux-gnu
-RUN --mount=type=cache,target=/app/target cp target/aarch64-unknown-linux-gnu/release/mie .
+RUN --mount=type=ssh --mount=type=cache,target=/app/target cargo build --release 
+RUN --mount=type=cache,target=/app/target cp target/release/mie .
 RUN --mount=type=cache,target=/app/target file mie
 
 FROM debian:12.8-slim
@@ -20,7 +20,7 @@ WORKDIR /app
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install --yes \
     ca-certificates ffmpeg curl python3
 RUN mkdir -p ~/.local/bin \
-    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2024.11.18/yt-dlp -o /root/.local/bin/yt-dlp \
+    && curl -L https://github.com/yt-dlp/yt-dlp/releases/download/2025.11.12/yt-dlp -o /root/.local/bin/yt-dlp \
     && chmod a+rx /root/.local/bin/yt-dlp \
     && DEBIAN_FRONTEND=noninteractive apt-get remove --yes curl && apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
