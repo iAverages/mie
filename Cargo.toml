@@ -10,7 +10,7 @@ tracing = "0.1.41"
 tracing-subscriber = { version = "0.3.20", features = ["env-filter"] }
 ytd-rs = { version = "0.1.7", features = ["yt-dlp"] }
 backblaze-b2-client = "0.1.6"
-twilight-gateway = "0.15.4"
+twilight-gateway = "0.17.0"
 twilight-http = "0.15.4"
 twilight-model = "0.15.4"
 dotenvy = "0.15.7"
