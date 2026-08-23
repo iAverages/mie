@@ -36,8 +36,9 @@
       ];
       runtimeDeps = with pkgs; [
         openssl
-        ffmpeg
+        ffmpeg-headless
         cacert
+        yt-dlp-light
       ];
     in {
       packages = {
@@ -48,7 +49,7 @@
           # cargoLock = {
           #   lockFile = ./Cargo.lock;
           # };
-          cargoDeps = pkgs. rustPlatform.importCargoLock {
+          cargoDeps = pkgs.rustPlatform.importCargoLock {
             lockFile = ./Cargo.lock;
           };
           nativeBuildInputs = buildDeps;
@@ -57,7 +58,15 @@
         dockerImage = pkgs.dockerTools.buildLayeredImage {
           name = "mie";
           tag = version;
-          config.Cmd = ["${self.packages.${system}.default}/bin/mie"];
+          config = {
+            Cmd = ["${self.packages.${system}.default}/bin/mie"];
+            Env = [
+              "PATH=/bin"
+              "RUST_BACKTRACE=full"
+              "SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt"
+              "YT_DLP=/bin"
+            ];
+          };
           contents =
             [
               self.packages.${system}.default
