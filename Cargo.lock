@@ -83,9 +83,9 @@ checksum = "c08606f8c3cbf4ce6ec8e28fb0014a2c086708fe954eaa885384a6165172e7e8"
 
 [[package]]
 name = "backblaze-b2-client"
-version = "0.1.6"
+version = "0.1.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6fece27db8ed9e965d2e52e6fdb87d9d23e4b90537bda24385b21f25bd28f17f"
+checksum = "0d85ffad7ed92e4842437b15d5635717e4259f33157038150b34883b18ebf677"
 dependencies = [
  "async-stream",
  "base64",
@@ -93,6 +93,7 @@ dependencies = [
  "futures",
  "futures-core",
  "num",
+ "percent-encoding",
  "rand 0.9.2",
  "reqwest",
  "serde",
@@ -105,7 +106,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "typed-builder",
- "urlencoding",
 ]
 
 [[package]]
