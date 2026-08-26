@@ -10,15 +10,16 @@ use std::error::Error;
 use std::sync::Arc;
 
 use backblaze_b2_client::client::B2Client;
-use serde::Serialize;
 use tracing_subscriber::EnvFilter;
-use twilight_gateway::{ConfigBuilder, Event, EventTypeFlags, Intents, Shard, ShardId};
-use twilight_http::routing::Route;
+use twilight_gateway::{ConfigBuilder, Event, EventTypeFlags, Intents, Shard, ShardId, StreamExt};
 use twilight_http::Client as HttpClient;
-use twilight_model::application::command::{CommandOption, CommandType};
+use twilight_model::application::command::CommandType;
+use twilight_model::application::interaction::InteractionContextType;
+use twilight_model::application::interaction::{InteractionData, InteractionType};
 use twilight_model::id::marker::ApplicationMarker;
 use twilight_model::id::Id;
-use vesper::prelude::Framework;
+use twilight_model::oauth::ApplicationIntegrationType;
+use twilight_util::builder::command::{CommandBuilder, StringBuilder};
 
 use self::commands::download::download;
 use self::env::{create_config, load_env, Config};
@@ -33,6 +34,9 @@ pub struct AppContext {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     load_env()?;
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .unwrap();
 
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -44,13 +48,11 @@ async fn main() -> anyhow::Result<()> {
         config.discord_token.clone(),
         Intents::GUILD_MESSAGES | Intents::MESSAGE_CONTENT | Intents::DIRECT_MESSAGES,
     )
-    .event_types(
-        EventTypeFlags::MESSAGE_CREATE
-            | EventTypeFlags::GATEWAY_HELLO
-            | EventTypeFlags::READY
-            | EventTypeFlags::INTERACTION_CREATE,
-    )
     .build();
+    let event_types = EventTypeFlags::MESSAGE_CREATE
+        | EventTypeFlags::GATEWAY_HELLO
+        | EventTypeFlags::READY
+        | EventTypeFlags::INTERACTION_CREATE;
 
     let mut shard = Shard::with_config(ShardId::ONE, shard_config);
 
@@ -73,80 +75,45 @@ async fn main() -> anyhow::Result<()> {
         b2,
     });
 
-    let framework = Arc::new(
-        Framework::builder(http.clone(), app_id, app_context.clone())
-            .command(download)
-            .build(),
-    );
-
-    // Register slash commands on discord
-    // framework.register_global_commands().await.unwrap();
-
-    // Manually create commands so I can use contexts as it currently
-    // is not supported in the released versions
-    for cmd in framework.commands.values() {
-        let options = cmd
-            .arguments
-            .iter()
-            .map(|a| a.as_option(&framework, cmd))
-            .collect::<Vec<_>>();
-
-        let c = reqwest::Client::new();
-        let path = Route::SetGlobalCommands {
-            application_id: app_id.into(),
-        }
-        .to_string();
-
-        tracing::info!("creating {} command", cmd.name);
-        c.post(format!("https://discord.com/api/v10/{}", path))
-            .header("Authorization", format!("Bot {}", config.discord_token))
-            .json(&GlobalCommandBody {
-                application_id: Some(app_id),
-                description: Some(cmd.description),
-                kind: CommandType::ChatInput,
-                name: cmd.name,
-                options: Some(options),
-                contexts: vec![0, 1, 2],
-                integration_types: vec![0, 1],
-            })
-            .send()
-            .await?;
-    }
+    tracing::info!("creating download command");
+    let command = CommandBuilder::new("download", "Download a video", CommandType::ChatInput)
+        .contexts([
+            InteractionContextType::Guild,
+            InteractionContextType::BotDm,
+            InteractionContextType::PrivateChannel,
+        ])
+        .integration_types([
+            ApplicationIntegrationType::GuildInstall,
+            ApplicationIntegrationType::UserInstall,
+        ])
+        .option(
+            StringBuilder::new("url", "URL To Download")
+                .required(true)
+                .build(),
+        )
+        .option(StringBuilder::new("content", "Extra text to include in message").build())
+        .build();
+    http.interaction(app_id)
+        .set_global_commands(&[command])
+        .await?;
 
     loop {
-        match shard.next_event().await {
-            Ok(item) => {
-                tokio::spawn(handle_event(
-                    Arc::clone(&app_context),
-                    framework.clone(),
-                    item,
-                ));
+        match shard.next_event(event_types).await {
+            Some(Ok(item)) => {
+                tokio::spawn(handle_event(Arc::clone(&app_context), item));
             }
-            Err(err) => {
+            Some(Err(err)) => {
                 tracing::warn!(source = ?err, "error receiving event");
             }
+            None => break,
         }
     }
-}
 
-#[derive(Serialize)]
-struct GlobalCommandBody<'a> {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub application_id: Option<Id<ApplicationMarker>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub description: Option<&'a str>,
-    #[serde(rename = "type")]
-    pub kind: CommandType,
-    pub name: &'a str,
-    #[serde(default)]
-    pub options: Option<Vec<CommandOption>>,
-    pub contexts: Vec<u32>,
-    pub integration_types: Vec<u32>,
+    Ok(())
 }
 
 async fn handle_event(
     ctx: Arc<AppContext>,
-    framework: Arc<Framework<Arc<AppContext>>>,
     event: Event,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
     match event {
@@ -158,8 +125,14 @@ async fn handle_event(
         Event::MessageCreate(_) => {}
 
         Event::InteractionCreate(i) => {
-            tracing::info!("hello interation");
-            framework.process(i.0).await;
+            let mut interaction = i.0;
+            if interaction.kind == InteractionType::ApplicationCommand {
+                if let Some(InteractionData::ApplicationCommand(data)) = interaction.data.take() {
+                    if data.name == "download" {
+                        download(ctx, interaction, *data).await;
+                    }
+                }
+            }
         }
 
         Event::Ready(_) => {

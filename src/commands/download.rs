@@ -2,9 +2,16 @@ use std::fs;
 use std::sync::Arc;
 use std::time::Instant;
 
+use twilight_model::application::interaction::{
+    application_command::{CommandData, CommandOptionValue},
+    Interaction,
+};
 use twilight_model::channel::message::embed::EmbedField;
+use twilight_model::channel::message::MessageFlags;
+use twilight_model::http::interaction::{
+    InteractionResponse, InteractionResponseData, InteractionResponseType,
+};
 use url::Url;
-use vesper::prelude::*;
 
 use crate::embed::MieEmbed;
 use crate::errors::MieError;
@@ -12,32 +19,20 @@ use crate::upload::{self, upload_files};
 use crate::video::download_video;
 use crate::AppContext;
 
-#[command(chat)]
-#[description = "Download a video"]
-pub async fn download(
-    ctx: &mut SlashContext<Arc<AppContext>>,
-    #[description = "URL To Download"] url: String,
-    #[description = "Extra text to inlude in message"] content: Option<String>,
-) -> DefaultCommandResult {
-    match download_inner(ctx, url, content).await {
-        Ok(val) => Ok(val),
-        // Err(MieError::VideoDownloadFailed(video)) => {
-        //     let channel = ctx.interaction.channel.clone().unwrap();
-        //     let channel_id = channel.id;
-        //     let mut embed = MieEmbed::new(ctx.data.clone(), channel_id);
-        //     ctx.interaction_client
-        //         .update_response(&ctx.interaction.token)
-        //         .embeds(Some(&[embed
-        //             .title("An error occured while downloading video".to_string())
-        //             .build()]))?
-        //         .await?;
-        //
-        //     Err(video)
-        // }
+pub async fn download(ctx: Arc<AppContext>, interaction: Interaction, data: CommandData) {
+    let url = string_option(&data, "url");
+    let content = string_option(&data, "content");
+    let Some(url) = url else {
+        tracing::error!("download command missing url option");
+        return;
+    };
+
+    match download_inner(&ctx, &interaction, url, content).await {
+        Ok(()) => {}
         Err(err) => {
-            let channel = ctx.interaction.channel.clone().unwrap();
+            let channel = interaction.channel.as_ref().unwrap();
             let channel_id = channel.id;
-            let mut embed = MieEmbed::new(ctx.data.clone(), channel_id);
+            let mut embed = MieEmbed::new(ctx.clone(), channel_id);
             let error_embed;
 
             if let Some(mie_error) = err.downcast_ref::<MieError>() {
@@ -55,29 +50,51 @@ pub async fn download(
                 error_embed = embed.title("An error occured while downloading video".to_string());
             }
 
-            ctx.interaction_client
-                .update_response(&ctx.interaction.token)
-                .embeds(Some(&[error_embed.build()]))?
-                .await?;
-            Err(err)
+            ctx.http
+                .interaction(interaction.application_id)
+                .update_response(&interaction.token)
+                .embeds(Some(&[error_embed.build()]))
+                .await
+                .ok();
         }
     }
 }
 
+fn string_option(data: &CommandData, name: &str) -> Option<String> {
+    data.options.iter().find_map(|option| match &option.value {
+        CommandOptionValue::String(value) if option.name == name => Some(value.clone()),
+        _ => None,
+    })
+}
+
 use std::error::Error;
 async fn download_inner(
-    ctx: &mut SlashContext<'_, Arc<AppContext>>,
+    ctx: &Arc<AppContext>,
+    interaction: &Interaction,
     url: String,
     content: Option<String>,
 ) -> Result<(), Box<dyn Error + Send + Sync>> {
-    ctx.defer(true).await?;
+    let interaction_client = ctx.http.interaction(interaction.application_id);
+    interaction_client
+        .create_response(
+            interaction.id,
+            &interaction.token,
+            &InteractionResponse {
+                kind: InteractionResponseType::DeferredChannelMessageWithSource,
+                data: Some(InteractionResponseData {
+                    flags: Some(MessageFlags::EPHEMERAL),
+                    ..InteractionResponseData::default()
+                }),
+            },
+        )
+        .await?;
     let is_http = url.starts_with("https://") || url.starts_with("http://");
 
     // Ignore if word is not a potential link
     if !is_http {
-        ctx.interaction_client
-            .update_response(&ctx.interaction.token)
-            .content(Some("give me a link you stupid fuck"))?
+        interaction_client
+            .update_response(&interaction.token)
+            .content(Some("give me a link you stupid fuck"))
             .await?;
 
         return Ok(());
@@ -85,21 +102,21 @@ async fn download_inner(
 
     let video_url = Url::parse(&url)?;
     // TODO: Fix unwarp
-    let channel = ctx.interaction.channel.clone().unwrap();
+    let channel = interaction.channel.as_ref().unwrap();
     let channel_id = channel.id;
-    let mut embed = MieEmbed::new(ctx.data.clone(), channel_id);
+    let mut embed = MieEmbed::new(ctx.clone(), channel_id);
 
     // Let user know we are downloading their URL
     // also ensures we have permissions to send messages in this channel
-    ctx.interaction_client
-        .update_response(&ctx.interaction.token)
-        .embeds(Some(&[embed.title("Downloading".to_string()).build()]))?
+    interaction_client
+        .update_response(&interaction.token)
+        .embeds(Some(&[embed.title("Downloading".to_string()).build()]))
         .await?;
 
     let downloaded_video = download_video(&video_url.to_string()).await?;
 
-    ctx.interaction_client
-        .update_response(&ctx.interaction.token)
+    interaction_client
+        .update_response(&interaction.token)
         .embeds(Some(&[embed
             .title("Video Downloading, uploading original...".to_string())
             .add_field(EmbedField {
@@ -112,23 +129,21 @@ async fn download_inner(
                 value: "Processing".to_string(),
                 inline: true,
             })
-            .build()]))?
+            .build()]))
         .await?;
 
     let files = vec![upload::UploadFile {
         path: downloaded_video.path.clone(),
     }];
 
-    let bucket = Arc::new(ctx.data.config.b2_bucket_id.clone())
-        .as_str()
-        .into();
+    let bucket = Arc::new(ctx.config.b2_bucket_id.clone()).as_str().into();
 
     let upload_start = Instant::now();
 
     tracing::info!(url, "uploading start");
 
     let uploaded_files = upload_files(
-        ctx.data.b2.clone(),
+        ctx.b2.clone(),
         bucket,
         files,
         Some(move |_path: &str, uploaded, total, percentage, bps, eta| {
@@ -145,8 +160,8 @@ async fn download_inner(
 
     if let Err(err) = uploaded_files {
         tracing::error!("failed to upload files: {:?}", err);
-        ctx.interaction_client
-            .update_response(&ctx.interaction.token)
+        interaction_client
+            .update_response(&interaction.token)
             .embeds(Some(&[embed
                 .title("failed to upload video".to_string())
                 .update_field(
@@ -157,18 +172,18 @@ async fn download_inner(
                         inline: true,
                     },
                 )
-                .build()]))?
+                .build()]))
             .await?;
         return Ok(());
     }
 
     tracing::info!(url, "uploading complete in {}ms", upload_time);
-    ctx.interaction_client
-        .update_response(&ctx.interaction.token)
+    interaction_client
+        .update_response(&interaction.token)
         .embeds(Some(&[embed
             .title(format!(
                 "Download: https://cdn.avrg.dev/{}/{}.mp4",
-                ctx.data.config.b2_bucket_path_prefix, downloaded_video.downloaded_file_name
+                ctx.config.b2_bucket_path_prefix, downloaded_video.downloaded_file_name
             ))
             .update_field(
                 1,
@@ -178,19 +193,16 @@ async fn download_inner(
                     inline: true,
                 },
             )
-            .build()]))?
+            .build()]))
         .await?;
-    ctx.interaction_client
-        .create_followup(&ctx.interaction.token)
-        .content(
-            format!(
-                "{} https://cdn.avrg.dev/{}/{}.mp4",
-                content.unwrap_or("".to_string()),
-                ctx.data.config.b2_bucket_path_prefix,
-                downloaded_video.downloaded_file_name
-            )
-            .as_str(),
-        )?
+    interaction_client
+        .create_followup(&interaction.token)
+        .content(&format!(
+            "{} https://cdn.avrg.dev/{}/{}.mp4",
+            content.unwrap_or_default(),
+            ctx.config.b2_bucket_path_prefix,
+            downloaded_video.downloaded_file_name
+        ))
         .await?;
 
     tracing::info!("donme?");

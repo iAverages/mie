@@ -63,7 +63,7 @@ impl MieEmbed {
                 .ctx
                 .http
                 .update_message(self.channel_id, self.message_id.unwrap())
-                .embeds(Some(&[self.embed.clone()]))?
+                .embeds(Some(&[self.embed.clone()]))
                 .await?
                 .model()
                 .await?;
@@ -76,7 +76,7 @@ impl MieEmbed {
             .ctx
             .http
             .create_message(self.channel_id)
-            .embeds(&[self.embed.clone()])?
+            .embeds(&[self.embed.clone()])
             .await?
             .model()
             .await?;
