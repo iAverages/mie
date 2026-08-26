@@ -7,7 +7,12 @@ use twilight_model::application::interaction::{
     Interaction,
 };
 use twilight_model::channel::message::embed::EmbedField;
-use twilight_model::channel::message::MessageFlags;
+use twilight_model::channel::message::{
+    component::{
+        Component, Container, MediaGallery, MediaGalleryItem, TextDisplay, UnfurledMediaItem,
+    },
+    MessageFlags,
+};
 use twilight_model::http::interaction::{
     InteractionResponse, InteractionResponseData, InteractionResponseType,
 };
@@ -195,17 +200,50 @@ async fn download_inner(
             )
             .build()]))
         .await?;
+    let components = video_components(
+        format!(
+            "https://cdn.avrg.dev/{}/{}.mp4",
+            ctx.config.b2_bucket_path_prefix, downloaded_video.downloaded_file_name
+        ),
+        content,
+    );
+
     interaction_client
         .create_followup(&interaction.token)
-        .content(&format!(
-            "{} https://cdn.avrg.dev/{}/{}.mp4",
-            content.unwrap_or_default(),
-            ctx.config.b2_bucket_path_prefix,
-            downloaded_video.downloaded_file_name
-        ))
+        .flags(MessageFlags::IS_COMPONENTS_V2)
+        .components(&components)
         .await?;
 
     tracing::info!("donme?");
 
     Ok(())
+}
+fn video_components(video_url: String, content: Option<String>) -> [Component; 1] {
+    let mut components = content
+        .filter(|content| !content.is_empty())
+        .map(|content| Component::TextDisplay(TextDisplay { id: None, content }))
+        .into_iter()
+        .collect::<Vec<_>>();
+
+    components.push(Component::MediaGallery(MediaGallery {
+        id: None,
+        items: vec![MediaGalleryItem {
+            media: UnfurledMediaItem {
+                url: video_url,
+                proxy_url: None,
+                height: None,
+                width: None,
+                content_type: None,
+            },
+            description: Some("Downloaded video".to_string()),
+            spoiler: None,
+        }],
+    }));
+
+    [Component::Container(Container {
+        id: None,
+        accent_color: Some(Some(11762810)),
+        spoiler: None,
+        components,
+    })]
 }
