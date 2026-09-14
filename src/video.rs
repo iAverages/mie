@@ -36,7 +36,9 @@ pub async fn download_video(video_url: &String) -> Result<DownloadedVideo, MieEr
 
     let path = PathBuf::from("/tmp/mie");
     let ytd = YoutubeDL::new(&path, args, video_url.as_str()).map_err(MieError::YtDlError)?;
-    let _ = ytd.download().map_err(MieError::YtDlError);
+    tokio::task::spawn_blocking(move || ytd.download().map_err(MieError::YtDlError))
+        .await
+        .map_err(MieError::DownloadTaskFailed)??;
 
     let download_time = process_start.elapsed().as_millis();
     tracing::info!(video_url, "Downloading took {}ms", download_time);

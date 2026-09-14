@@ -9,6 +9,7 @@ use crate::video::DownloadedVideo;
 pub enum MieError {
     VideoDownloadFailed(DownloadedVideo),
     YtDlError(YoutubeDLError),
+    DownloadTaskFailed(tokio::task::JoinError),
 }
 
 impl Error for MieError {}
@@ -21,8 +22,9 @@ impl Display for MieError {
             }
             MieError::YtDlError(ytdl_erro) => {
                 // todo: make this better not sure how
-                write!(f, "ytdl error: {}", ytdl_erro.to_string())
+                write!(f, "ytdl error: {ytdl_erro}")
             }
+            MieError::DownloadTaskFailed(error) => write!(f, "download task failed: {error}"),
         }
     }
 }

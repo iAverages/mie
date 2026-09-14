@@ -49,6 +49,9 @@ pub async fn download(ctx: Arc<AppContext>, interaction: Interaction, data: Comm
                     MieError::YtDlError(_) => {
                         error_embed = embed.title("ytdlp errored".to_string());
                     }
+                    MieError::DownloadTaskFailed(_) => {
+                        error_embed = embed.title("download task failed".to_string());
+                    }
                 }
             } else {
                 tracing::error!("unhandled error: {}", err.to_string());
